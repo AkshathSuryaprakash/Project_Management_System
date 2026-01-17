@@ -1,0 +1,13 @@
+{
+    "name": "project-management-saas",
+    "version": "1.0.0",
+    "description": "Project Management SaaS Application",
+    "private": true,
+    "scripts": {
+        "dev": "concurrently \"npm --prefix backend run dev\" \"npm --prefix client run dev -- --port 3000\"",
+        "install-all": "npm install && npm --prefix backend install && npm --prefix client install"
+    },
+    "dependencies": {
+        "concurrently": "^9.2.1"
+    }
+}
