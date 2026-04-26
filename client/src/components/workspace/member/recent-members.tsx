@@ -9,7 +9,7 @@ const RecentMembers = () => {
   const workspaceId = useWorkspaceId();
   const { data, isPending } = useGetWorkspaceMembers(workspaceId);
 
-  const members = data?.members?.slice(0, 4) || []; // ✅ Limit to 3
+  const members = data?.members?.slice(0, 3) || []; // ✅ Limit to 3
 
   return (
     <div className="flex flex-col pt-2">

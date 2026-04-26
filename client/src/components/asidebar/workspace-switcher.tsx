@@ -68,14 +68,14 @@ export function WorkspaceSwitcher() {
     <>
       <SidebarGroupLabel className="w-full justify-between pr-0">
         <span>Workspaces</span>
-        <button
-          onClick={onOpen}
-          type="button"
-          className="flex items-center gap-1 text-[11px] font-medium bg-blue-50 text-blue-600 hover:bg-blue-100 transition-colors px-2 py-0.5 rounded-full"
-        >
-          <Plus className="size-3" />
-          <span>New Workspace</span>
-        </button>
+          <button
+            onClick={onOpen}
+            type="button"
+            className="flex items-center gap-1 text-[10px] font-medium bg-blue-50 text-blue-600 hover:bg-blue-100 transition-colors px-2 py-0.5 rounded-full"
+          >
+            <Plus className="size-3" />
+            <span>New</span>
+          </button>
       </SidebarGroupLabel>
       <SidebarMenu>
         <SidebarMenuItem>

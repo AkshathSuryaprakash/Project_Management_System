@@ -1,0 +1,12 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: backend-config
+  namespace: pm-saas
+data:
+  NODE_ENV: "production"
+  PORT: "8000"
+  BASE_PATH: "/api"
+  FRONTEND_ORIGIN: "{{ client_url }}"
+  GOOGLE_CALLBACK_URL: "{{ backend_url }}/api/auth/google/callback"
+  FRONTEND_GOOGLE_CALLBACK_URL: "{{ client_url }}/google/callback"

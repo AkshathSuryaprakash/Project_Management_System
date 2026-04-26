@@ -1,0 +1,15 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: backend-config
+  namespace: pm-saas
+data:
+  NODE_ENV: "production"
+  PORT: "8000"
+  BASE_PATH: "/api"
+  # NOTE: This file is a reference only. Use the Ansible template
+  # deploy/ansible/templates/backend-configmap.yaml.j2 to render
+  # runtime URLs (Minikube IP/NodePorts) dynamically.
+  FRONTEND_ORIGIN: "CHANGE_ME"
+  GOOGLE_CALLBACK_URL: "CHANGE_ME"
+  FRONTEND_GOOGLE_CALLBACK_URL: "CHANGE_ME"

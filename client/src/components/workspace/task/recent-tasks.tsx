@@ -21,8 +21,8 @@ const RecentTasks = () => {
     queryFn: () =>
       getAllTasksQueryFn({
         workspaceId,
-        pageNumber: 1, // ✅ Added
-        pageSize: 4, // ✅ Added - limit to 3
+        pageNumber: 1,
+        pageSize: 3,
       }),
     staleTime: 0,
     enabled: !!workspaceId,

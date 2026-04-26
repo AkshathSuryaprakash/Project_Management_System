@@ -37,6 +37,7 @@
     "immer": "^10.1.1",
     "lucide-react": "^0.469.0",
     "nuqs": "^2.2.3",
+    "project-management-saas": "file:..",
     "react": "^18.3.1",
     "react-circular-progressbar": "^2.2.0",
     "react-day-picker": "^8.10.1",

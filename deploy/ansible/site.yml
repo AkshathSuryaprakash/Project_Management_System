@@ -1,0 +1,71 @@
+- name: Build and deploy Project Management SaaS to Minikube
+  hosts: local
+  vars:
+    project_root: "/home/BitterSteel/coursework/git_repos/project_management_saas"
+    backend_image: "pm-saas-backend:local"
+    client_image: "pm-saas-client:local"
+    backend_service_port: 30082
+    client_service_port: 30083
+
+  tasks:
+    - name: Get Minikube IP
+      command: minikube ip
+      register: minikube_ip
+      changed_when: false
+
+    - name: Set service URLs
+      set_fact:
+        backend_url: "http://{{ minikube_ip.stdout }}:{{ backend_service_port }}"
+        client_url: "http://{{ minikube_ip.stdout }}:{{ client_service_port }}"
+
+    - name: Build backend image in Minikube Docker
+      shell: |
+        eval $(minikube -p minikube docker-env)
+        docker build -t {{ backend_image }} -f {{ project_root }}/backend/Dockerfile {{ project_root }}/backend
+      args:
+        executable: /bin/bash
+
+    - name: Build client image in Minikube Docker
+      shell: |
+        eval $(minikube -p minikube docker-env)
+        docker build --no-cache \
+          --build-arg VITE_API_BASE_URL={{ backend_url }}/api \
+          -t {{ client_image }} \
+          -f {{ project_root }}/client/Dockerfile {{ project_root }}/client
+      args:
+        executable: /bin/bash
+
+    - name: Render backend ConfigMap with dynamic URLs
+      template:
+        src: templates/backend-configmap.yaml.j2
+        dest: /tmp/backend-configmap.yaml
+
+    - name: Apply Kubernetes manifests
+      shell: |
+        kubectl config use-context minikube
+        kubectl apply -f {{ project_root }}/deploy/k8s/namespace.yaml
+        kubectl apply -f {{ project_root }}/deploy/k8s/mongo-pvc.yaml
+        kubectl apply -f {{ project_root }}/deploy/k8s/mongo-deployment.yaml
+        kubectl apply -f {{ project_root }}/deploy/k8s/mongo-service.yaml
+        kubectl apply -f {{ project_root }}/deploy/k8s/backend-secret.yaml
+        kubectl apply -f /tmp/backend-configmap.yaml
+        kubectl apply -f {{ project_root }}/deploy/k8s/backend-deployment.yaml
+        kubectl apply -f {{ project_root }}/deploy/k8s/backend-service.yaml
+        kubectl apply -f {{ project_root }}/deploy/k8s/client-deployment.yaml
+        kubectl apply -f {{ project_root }}/deploy/k8s/client-service.yaml
+      args:
+        executable: /bin/bash
+
+    - name: Restart deployments to pick up rebuilt images
+      shell: |
+        kubectl rollout restart deployment/backend -n pm-saas
+        kubectl rollout restart deployment/client -n pm-saas
+      args:
+        executable: /bin/bash
+
+    - name: Wait for rollouts to complete
+      shell: |
+        kubectl rollout status deployment/backend -n pm-saas --timeout=120s
+        kubectl rollout status deployment/client -n pm-saas --timeout=120s
+      args:
+        executable: /bin/bash

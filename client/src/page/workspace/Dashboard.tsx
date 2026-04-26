@@ -4,7 +4,7 @@ import { useQuery } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
 import useCreateProjectDialog from "@/hooks/use-create-project-dialog";
 import useWorkspaceId from "@/hooks/use-workspace-id";
-import { getWorkspaceAnalyticsQueryFn, getProjectsInWorkspaceQueryFn, getAllTasksQueryFn } from "@/lib/api";
+import { getProjectsInWorkspaceQueryFn, getAllTasksQueryFn } from "@/lib/api";
 import WorkspaceAnalytics from "@/components/workspace/workspace-analytics";
 import TaskDistributionChart from "@/components/workspace/task-distribution-chart";
 import PriorityDistributionChart from "@/components/workspace/priority-distribution-chart";
@@ -17,14 +17,6 @@ import RecentMembers from "@/components/workspace/member/recent-members";
 const WorkspaceDashboard = () => {
   const { onOpen } = useCreateProjectDialog();
   const workspaceId = useWorkspaceId();
-
-  // Fetch analytics data
-  const { data: analyticsData } = useQuery({
-    queryKey: ["workspace-analytics", workspaceId],
-    queryFn: () => getWorkspaceAnalyticsQueryFn(workspaceId),
-    staleTime: 0,
-    enabled: !!workspaceId,
-  });
 
   // Fetch projects
   const { data: projectsResponse } = useQuery({
@@ -52,7 +44,6 @@ const WorkspaceDashboard = () => {
     enabled: !!workspaceId,
   });
 
-  const analytics = analyticsData?.analytics;
   const projects = projectsResponse?.projects || [];
   const tasks = tasksResponse?.tasks || [];
 

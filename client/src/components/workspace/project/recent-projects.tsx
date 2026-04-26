@@ -12,7 +12,7 @@ const RecentProjects = () => {
   const { data, isPending } = useGetProjectsInWorkspaceQuery({
     workspaceId,
     pageNumber: 1,
-    pageSize: 4,
+    pageSize: 3,
   });
 
   const projects = data?.projects || [];
