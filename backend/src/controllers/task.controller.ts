@@ -7,7 +7,8 @@ import {
 } from "../validation/task.validation";
 import { projectIdSchema } from "../validation/project.validation";
 import { workspaceIdSchema } from "../validation/workspace.validation";
-import { Permissions } from "../enums/role.enum";
+import { Permissions, Roles } from "../enums/role.enum";
+import { BadRequestException } from "../utils/appError";
 import { getMemberRoleInWorkspace } from "../services/member.service";
 import { roleGuard } from "../utils/roleGuard";
 import {
@@ -29,6 +30,14 @@ export const createTaskController = asyncHandler(
 
     const { role } = await getMemberRoleInWorkspace(userId, workspaceId);
     roleGuard(role, [Permissions.CREATE_TASK]);
+
+    // Restrict standard members to only assign tasks to themselves
+    if (role === Roles.MEMBER) {
+      const newAssignedTo = body.assignedTo ? body.assignedTo.toString() : null;
+      if (newAssignedTo !== userId.toString()) {
+        throw new BadRequestException("Members can only assign tasks to themselves.");
+      }
+    }
 
     const { task } = await createTaskService(
       workspaceId,
@@ -56,6 +65,21 @@ export const updateTaskController = asyncHandler(
 
     const { role } = await getMemberRoleInWorkspace(userId, workspaceId);
     roleGuard(role, [Permissions.EDIT_TASK]);
+
+    // Restrict standard members to only change assignment to themselves
+    if (role === Roles.MEMBER) {
+      if (body.assignedTo !== undefined) {
+        const task = await getTaskByIdService(workspaceId, projectId, taskId);
+        const newAssignedTo = body.assignedTo ? body.assignedTo.toString() : null;
+        const currentAssignedTo = task.assignedTo ? (task.assignedTo as any)._id?.toString() || task.assignedTo.toString() : null;
+        
+        if (newAssignedTo !== currentAssignedTo) {
+          if (newAssignedTo !== userId.toString()) {
+            throw new BadRequestException("Members can only assign tasks to themselves.");
+          }
+        }
+      }
+    }
 
     const { updatedTask } = await updateTaskService(
       workspaceId,

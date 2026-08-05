@@ -1,3 +1,4 @@
+import { useEffect } from "react";
 import { z } from "zod";
 import { format } from "date-fns";
 import { zodResolver } from "@hookform/resolvers/zod";
@@ -41,6 +42,7 @@ import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { createTaskMutationFn } from "@/lib/api";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { toast } from "@/hooks/use-toast";
+import { useAuthContext } from "@/context/auth-provider";
 
 export default function CreateTaskForm(props: {
   projectId?: string;
@@ -50,6 +52,12 @@ export default function CreateTaskForm(props: {
 
   const queryClient = useQueryClient();
   const workspaceId = useWorkspaceId();
+
+  const { user, workspace } = useAuthContext();
+  const currentMember = workspace?.members?.find(
+    (m: any) => m.userId === user?._id
+  );
+  const isMember = currentMember?.role?.name === "MEMBER";
 
   const { mutate, isPending } = useMutation({
     mutationFn: createTaskMutationFn,
@@ -132,8 +140,15 @@ export default function CreateTaskForm(props: {
       title: "",
       description: "",
       projectId: projectId ? projectId : "",
+      assignedTo: isMember ? user?._id || "" : "",
     },
   });
+
+  useEffect(() => {
+    if (isMember && user?._id) {
+      form.setValue("assignedTo", user._id);
+    }
+  }, [isMember, user?._id, form]);
 
   const taskStatusList = Object.values(TaskStatusEnum);
   const taskPriorityList = Object.values(TaskPriorityEnum); // ["LOW", "MEDIUM", "HIGH", "URGENT"]
@@ -299,11 +314,12 @@ export default function CreateTaskForm(props: {
                     <FormLabel>Assigned To</FormLabel>
                     <Select
                       onValueChange={field.onChange}
+                      value={field.value}
                       defaultValue={field.value}
                     >
                       <FormControl>
-                        <SelectTrigger>
-                          <SelectValue placeholder="Select a assignee" />
+                        <SelectTrigger disabled={isMember}>
+                          <SelectValue placeholder="Select an assignee" />
                         </SelectTrigger>
                       </FormControl>
                       <SelectContent>

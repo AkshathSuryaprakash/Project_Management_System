@@ -5,7 +5,7 @@
   "main": "index.js",
   "scripts": {
     "seed": "ts-node src/seeders/role.seeder.ts",
-    "dev": "ts-node-dev --files src/index.ts",
+    "dev": "ts-node --transpile-only src/index.ts",
     "build": "tsc && cp package.json ./dist",
     "start": "node dist/index.js"
   },
@@ -37,6 +37,7 @@
     "@types/passport": "^1.0.17",
     "@types/passport-google-oauth20": "^2.0.16",
     "@types/passport-local": "^1.0.38",
+    "mongodb-memory-server": "^11.2.0",
     "ts-node-dev": "^2.0.0",
     "typescript": "^5.7.2"
   }

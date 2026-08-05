@@ -34,10 +34,17 @@ import { editTaskMutationFn } from "@/lib/api";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { toast } from "@/hooks/use-toast";
 import { TaskType } from "@/types/api.type";
+import { useAuthContext } from "@/context/auth-provider";
 
 export default function EditTaskForm({ task, onClose }: { task: TaskType; onClose: () => void }) {
   const queryClient = useQueryClient();
   const workspaceId = useWorkspaceId();
+
+  const { user, workspace } = useAuthContext();
+  const currentMember = workspace?.members?.find(
+    (m: any) => m.userId === user?._id
+  );
+  const isMember = currentMember?.role?.name === "MEMBER";
 
   const { mutate, isPending } = useMutation({
     mutationFn: editTaskMutationFn,
@@ -148,7 +155,7 @@ export default function EditTaskForm({ task, onClose }: { task: TaskType; onClos
               <FormItem>
                 <FormLabel>Assigned To</FormLabel>
                 <Select onValueChange={field.onChange} value={field.value} defaultValue={field.value}>
-                  <FormControl><SelectTrigger><SelectValue placeholder="Select an assignee" /></SelectTrigger></FormControl>
+                  <FormControl><SelectTrigger disabled={isMember}><SelectValue placeholder="Select an assignee" /></SelectTrigger></FormControl>
                   <SelectContent>
                   <div className="w-full max-h-[200px] overflow-y-auto scrollbar">
                     {membersOptions.map((option) => (
