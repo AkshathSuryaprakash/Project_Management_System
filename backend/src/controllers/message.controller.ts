@@ -14,7 +14,7 @@ const sendMessageSchema = z.object({
   conversationId: z.string().optional(),
   channel: z.string().optional(),
   recipientId: z.string().optional(),
-  content: z.string().trim().min(1, "Message content cannot be empty"),
+  content: z.string().default(""),
   attachments: z
     .array(
       z.object({
@@ -69,6 +69,19 @@ export const sendMessageController = asyncHandler(
     const userId = req.user?._id;
     const { workspaceId } = req.params;
     const body = sendMessageSchema.parse(req.body);
+
+    if (
+      !body.content?.trim() &&
+      (!body.attachments || body.attachments.length === 0)
+    ) {
+      return res.status(HTTPSTATUS.BAD_REQUEST).json({
+        message: "Message content or attachment is required",
+      });
+    }
+
+    if (!body.content?.trim() && body.attachments && body.attachments.length > 0) {
+      body.content = "Shared attachment";
+    }
 
     await getMemberRoleInWorkspace(userId, workspaceId);
 

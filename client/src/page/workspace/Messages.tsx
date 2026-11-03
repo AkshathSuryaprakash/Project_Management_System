@@ -23,9 +23,17 @@ import {
   Download,
   X,
   Loader,
+  UserCheck,
 } from "lucide-react";
 import { getAvatarColor, getAvatarFallbackText } from "@/lib/helper";
 import { toast } from "@/hooks/use-toast";
+
+// Helper to reliably extract an ID string from an object or string
+export const extractId = (obj: any): string => {
+  if (!obj) return "";
+  if (typeof obj === "string") return obj;
+  return (obj._id || obj.id || "").toString();
+};
 
 export default function Messages() {
   const workspaceId = useWorkspaceId();
@@ -65,50 +73,82 @@ export default function Messages() {
     { name: "design", conversationId: "channel:design" },
   ];
 
+  const currentUserId = extractId(user);
+
+  // Helper to extract clean user object from member record
+  const getMemberUser = (m: any) => {
+    if (!m) return null;
+    if (m.userId && typeof m.userId === "object") {
+      return {
+        _id: extractId(m.userId),
+        name: m.userId.name || "Colleague",
+        email: m.userId.email || "",
+        profilePicture: m.userId.profilePicture || null,
+      };
+    }
+    return {
+      _id: extractId(m.userId || m),
+      name: m.name || "Colleague",
+      email: m.email || "",
+      profilePicture: m.profilePicture || null,
+    };
+  };
+
+  // Clean list of team members
+  const memberUsers = useMemo(() => {
+    return members
+      .map((m: any) => ({
+        memberRecordId: extractId(m),
+        user: getMemberUser(m),
+      }))
+      .filter((item: any) => item.user && item.user._id);
+  }, [members]);
+
   // Auto-select DM user from URL search param `?dm=userId` if present
   useEffect(() => {
     const dmUserId = searchParams.get("dm");
-    if (dmUserId && members.length > 0) {
-      const targetMember = members.find(
-        (m: any) =>
-          m.userId?._id?.toString() === dmUserId ||
-          m.userId?.toString() === dmUserId
+    if (dmUserId && memberUsers.length > 0) {
+      const targetItem = memberUsers.find(
+        (item: any) =>
+          item.user._id === dmUserId ||
+          item.memberRecordId === dmUserId ||
+          item.user.email === dmUserId
       );
-      if (targetMember && targetMember.userId) {
+      if (targetItem && targetItem.user) {
         setActiveType("dm");
-        setActiveDmUser(targetMember.userId);
+        setActiveDmUser(targetItem.user);
       }
     }
-  }, [searchParams, members]);
+  }, [searchParams, memberUsers]);
+
+  const activeDmUserId = extractId(activeDmUser);
 
   // Compute normalized conversationId
   const conversationId = useMemo(() => {
     if (activeType === "channel") {
-      return `channel:${activeChannel.toLowerCase()}`;
+      return `channel:${(activeChannel || "general").toLowerCase()}`;
     }
-    if (activeType === "dm" && activeDmUser?._id && user?._id) {
-      const u1 = user._id.toString();
-      const u2 = activeDmUser._id.toString();
-      const sorted = [u1, u2].sort();
+    if (activeType === "dm" && activeDmUserId && currentUserId) {
+      const sorted = [currentUserId, activeDmUserId].sort();
       return `dm:${sorted[0]}_${sorted[1]}`;
     }
     return "";
-  }, [activeType, activeChannel, activeDmUser?._id, user?._id]);
+  }, [activeType, activeChannel, activeDmUserId, currentUserId]);
 
   // Join/leave conversation room over Socket.IO
   useEffect(() => {
-    if (socket && conversationId && workspaceId && user?._id) {
+    if (socket && conversationId && workspaceId && currentUserId) {
       socket.emit("join_conversation", {
         workspaceId,
         conversationId,
-        userId: user._id,
+        userId: currentUserId,
       });
 
       return () => {
         socket.emit("leave_conversation", { conversationId });
       };
     }
-  }, [socket, conversationId, workspaceId, user?._id]);
+  }, [socket, conversationId, workspaceId, currentUserId]);
 
   // Messages Query
   const { data: messagesData, isLoading: isLoadingMessages } = useQuery({
@@ -132,7 +172,7 @@ export default function Messages() {
           ["messages", workspaceId, conversationId],
           (old: any) => {
             const list = old?.messages || [];
-            if (list.some((m: any) => m._id === newMsg._id)) return old;
+            if (list.some((m: any) => extractId(m) === extractId(newMsg))) return old;
             return { ...old, messages: [...list, newMsg] };
           }
         );
@@ -156,39 +196,42 @@ export default function Messages() {
 
     const handleNewMessage = (msg: any) => {
       if (!msg) return;
-      const msgWsId = (msg.workspaceId?._id || msg.workspaceId)?.toString();
+      const msgWsId = extractId(msg.workspaceId);
       const curWsId = workspaceId?.toString();
       if (msgWsId && curWsId && msgWsId !== curWsId) return;
 
+      const incomingConvId = (msg.conversationId || "").toLowerCase();
+      const currentConvId = (conversationId || "").toLowerCase();
+
       // Check if message belongs to current active conversation
-      if (msg.conversationId === conversationId) {
+      if (incomingConvId === currentConvId) {
         queryClient.setQueryData(
           ["messages", workspaceId, conversationId],
           (old: any) => {
             const list = old?.messages || [];
-            if (list.some((m: any) => m._id === msg._id)) return old;
+            if (list.some((m: any) => extractId(m) === extractId(msg))) return old;
             return { ...old, messages: [...list, msg] };
           }
         );
       } else {
-        // Also update cached messages for that conversation room so switching is instant
+        // Update cached messages for that conversation room so switching is instant
         queryClient.setQueryData(
           ["messages", workspaceId, msg.conversationId],
           (old: any) => {
             const list = old?.messages || [];
-            if (list.some((m: any) => m._id === msg._id)) return old;
+            if (list.some((m: any) => extractId(m) === extractId(msg))) return old;
             return { ...old, messages: [...list, msg] };
           }
         );
 
         // Update unread count for DM sender if message was sent to us
-        const senderId = (msg.senderId?._id || msg.senderId)?.toString();
-        const recipientId = (msg.recipientId?._id || msg.recipientId)?.toString();
+        const senderId = extractId(msg.senderId);
+        const recipientId = extractId(msg.recipientId);
         if (
           recipientId &&
-          user?._id &&
-          recipientId === user._id.toString() &&
-          senderId !== user._id.toString()
+          currentUserId &&
+          recipientId === currentUserId &&
+          senderId !== currentUserId
         ) {
           setUnreadCounts((prev) => ({
             ...prev,
@@ -201,7 +244,7 @@ export default function Messages() {
     const handleTypingStart = (data: any) => {
       if (
         data.conversationId === conversationId &&
-        data.userId !== user?._id?.toString()
+        extractId(data.userId) !== currentUserId
       ) {
         setTypingUsers((prev) =>
           prev.includes(data.userName) ? prev : [...prev, data.userName]
@@ -224,7 +267,7 @@ export default function Messages() {
       socket.off("typing:start", handleTypingStart);
       socket.off("typing:stop", handleTypingStop);
     };
-  }, [socket, workspaceId, conversationId, user?._id, queryClient]);
+  }, [socket, workspaceId, conversationId, currentUserId, queryClient]);
 
   // Scroll to bottom on new messages
   useEffect(() => {
@@ -233,7 +276,18 @@ export default function Messages() {
 
   const handleSend = (e: React.FormEvent) => {
     e.preventDefault();
-    if (!messageText.trim() && attachments.length === 0) return;
+    const trimmed = messageText.trim();
+    if (!trimmed && attachments.length === 0) return;
+
+    if (activeType === "dm" && !activeDmUserId) {
+      toast({
+        title: "No member selected",
+        description: "Please select a team member from the Direct Messages list to start chatting.",
+        variant: "destructive",
+      });
+      return;
+    }
+
     if (!conversationId) {
       toast({
         title: "No conversation selected",
@@ -243,22 +297,24 @@ export default function Messages() {
       return;
     }
 
+    const finalContent = trimmed || (attachments.length > 0 ? "Shared attachment" : "");
+
     sendMessage({
       workspaceId,
       data: {
         conversationId,
-        content: messageText.trim() || (attachments.length > 0 ? "Shared attachments" : ""),
-        channel: activeType === "channel" ? activeChannel : undefined,
-        recipientId: activeType === "dm" ? activeDmUser?._id : undefined,
+        content: finalContent,
+        channel: activeType === "channel" ? activeChannel.toLowerCase() : undefined,
+        recipientId: activeType === "dm" ? activeDmUserId : undefined,
         attachments: attachments.length > 0 ? attachments : undefined,
       },
     });
 
-    if (socket) {
+    if (socket && conversationId) {
       socket.emit("typing:stop", {
         workspaceId,
         conversationId,
-        userId: user?._id,
+        userId: currentUserId,
         userName: user?.name,
       });
     }
@@ -271,14 +327,14 @@ export default function Messages() {
         socket.emit("typing:start", {
           workspaceId,
           conversationId,
-          userId: user?._id,
+          userId: currentUserId,
           userName: user?.name || "Colleague",
         });
       } else {
         socket.emit("typing:stop", {
           workspaceId,
           conversationId,
-          userId: user?._id,
+          userId: currentUserId,
           userName: user?.name,
         });
       }
@@ -325,9 +381,9 @@ export default function Messages() {
   };
 
   // Filter members for DM list
-  const filteredMembers = members.filter((m: any) => {
-    const name = m.userId?.name || "";
-    const email = m.userId?.email || "";
+  const filteredMemberUsers = memberUsers.filter((item: any) => {
+    const name = item.user?.name || "";
+    const email = item.user?.email || "";
     const q = searchMember.toLowerCase();
     return name.toLowerCase().includes(q) || email.toLowerCase().includes(q);
   });
@@ -335,12 +391,16 @@ export default function Messages() {
   const activeTitle =
     activeType === "channel"
       ? `#${activeChannel}`
-      : `${activeDmUser?.name || "Direct Message"}`;
+      : activeDmUser
+      ? activeDmUser.name
+      : "Direct Message";
 
   const placeholderText =
     activeType === "channel"
       ? `Message #${activeChannel}...`
-      : `Message ${activeDmUser?.name || "colleague"}...`;
+      : activeDmUser
+      ? `Message ${activeDmUser.name}...`
+      : "Select a colleague to message...";
 
   return (
     <div className="w-full flex h-[calc(100vh-5rem)] rounded-xl border bg-card text-card-foreground shadow-sm overflow-hidden">
@@ -354,18 +414,43 @@ export default function Messages() {
 
       {/* LEFT SIDEBAR matching Figure 9.10 */}
       <div className="w-64 md:w-72 border-r bg-muted/20 flex flex-col shrink-0">
-        <div className="p-3.5 border-b space-y-3">
+        <div className="p-3 border-b space-y-2.5 bg-muted/30">
           <div className="flex items-center justify-between">
             <h2 className="font-bold text-base tracking-tight flex items-center gap-2">
               <MessageSquare className="w-4 h-4 text-primary" /> Messages
             </h2>
-            <span
-              className={`h-2 w-2 rounded-full ${
-                isConnected ? "bg-emerald-500" : "bg-red-500"
-              }`}
-              title={isConnected ? "Socket connected" : "Socket disconnected"}
-            />
+            <div className="flex items-center gap-1.5 text-[11px] text-muted-foreground">
+              <span
+                className={`h-2 w-2 rounded-full ${
+                  isConnected ? "bg-emerald-500 animate-pulse" : "bg-red-500"
+                }`}
+                title={isConnected ? "Socket connected" : "Socket disconnected"}
+              />
+              <span>{isConnected ? "Live" : "Offline"}</span>
+            </div>
           </div>
+
+          {/* Active Account Pill */}
+          {user && (
+            <div className="flex items-center gap-2 px-2 py-1.5 rounded-md bg-background border text-xs shadow-2xs">
+              <Avatar className="h-5 w-5 shrink-0">
+                <AvatarImage src={user.profilePicture || ""} />
+                <AvatarFallback className="text-[9px] bg-primary/20 text-primary font-bold">
+                  {getAvatarFallbackText(user.name || "U")}
+                </AvatarFallback>
+              </Avatar>
+              <div className="truncate min-w-0 flex-1">
+                <p className="font-semibold text-xs leading-none truncate text-foreground flex items-center gap-1">
+                  <span className="truncate">{user.name}</span>
+                  <span className="text-[10px] text-primary font-bold">(You)</span>
+                </p>
+                <p className="text-[10px] text-muted-foreground truncate leading-tight mt-0.5">
+                  {user.email}
+                </p>
+              </div>
+            </div>
+          )}
+
           <div className="relative">
             <Search className="w-3.5 h-3.5 absolute left-2.5 top-2.5 text-muted-foreground" />
             <Input
@@ -386,13 +471,14 @@ export default function Messages() {
             <div className="space-y-0.5">
               {channels.map((ch: any) => {
                 const isSelected =
-                  activeType === "channel" && activeChannel === ch.name;
+                  activeType === "channel" &&
+                  activeChannel.toLowerCase() === ch.name.toLowerCase();
                 return (
                   <button
                     key={ch.name}
                     onClick={() => {
                       setActiveType("channel");
-                      setActiveChannel(ch.name);
+                      setActiveChannel(ch.name.toLowerCase());
                     }}
                     className={`w-full flex items-center gap-2 px-2.5 py-1.5 rounded-md text-xs font-medium transition-colors ${
                       isSelected
@@ -414,14 +500,11 @@ export default function Messages() {
               Direct Messages
             </h3>
             <div className="space-y-0.5">
-              {filteredMembers.map((m: any) => {
-                const u = m.userId;
-                if (!u) return null;
-                const uId = (u._id || u).toString();
-                const currentId = user?._id?.toString();
-                const isSelected =
-                  activeType === "dm" && activeDmUser?._id?.toString() === uId;
-                const isSelf = uId === currentId;
+              {filteredMemberUsers.map((item: any) => {
+                const u = item.user;
+                const uId = u._id;
+                const isSelected = activeType === "dm" && activeDmUserId === uId;
+                const isSelf = uId === currentUserId;
                 const initials = getAvatarFallbackText(u.name || "U");
                 const color = getAvatarColor(u.name || "U");
                 const unread = unreadCounts[uId] || 0;
@@ -471,19 +554,36 @@ export default function Messages() {
         <div className="h-12 border-b flex items-center px-4 justify-between shrink-0 bg-muted/10">
           <div className="flex items-center gap-2 truncate">
             {activeType === "channel" ? (
-              <Hash className="w-4 h-4 text-muted-foreground shrink-0" />
+              <>
+                <Hash className="w-4 h-4 text-primary shrink-0" />
+                <span className="font-semibold text-sm truncate">#{activeChannel}</span>
+                <span className="text-xs text-muted-foreground hidden sm:inline">
+                  • Workspace Channel
+                </span>
+              </>
+            ) : activeDmUser ? (
+              <>
+                <Avatar className="h-6 w-6 shrink-0">
+                  <AvatarImage src={activeDmUser?.profilePicture || ""} />
+                  <AvatarFallback className="text-[10px]">
+                    {getAvatarFallbackText(activeDmUser?.name || "U")}
+                  </AvatarFallback>
+                </Avatar>
+                <span className="font-semibold text-sm truncate">{activeTitle}</span>
+                {activeDmUser.email && (
+                  <span className="text-[11px] text-muted-foreground font-normal">
+                    ({activeDmUser.email})
+                  </span>
+                )}
+                {activeDmUserId === currentUserId && (
+                  <span className="text-[10px] bg-primary/10 text-primary px-1.5 py-0.5 rounded font-semibold">
+                    Personal Notes
+                  </span>
+                )}
+              </>
             ) : (
-              <Avatar className="h-6 w-6 shrink-0">
-                <AvatarImage src={activeDmUser?.profilePicture || ""} />
-                <AvatarFallback className="text-[10px]">
-                  {getAvatarFallbackText(activeDmUser?.name || "U")}
-                </AvatarFallback>
-              </Avatar>
-            )}
-            <span className="font-semibold text-sm truncate">{activeTitle}</span>
-            {activeType === "dm" && (
-              <span className="text-[11px] text-muted-foreground font-normal">
-                ({activeDmUser?.email})
+              <span className="font-medium text-sm text-muted-foreground">
+                Select a team member to start chatting
               </span>
             )}
           </div>
@@ -491,7 +591,42 @@ export default function Messages() {
 
         {/* Message History */}
         <div className="flex-1 overflow-y-auto p-4 space-y-4">
-          {isLoadingMessages ? (
+          {activeType === "dm" && !activeDmUser ? (
+            <div className="flex flex-col items-center justify-center h-full text-center p-6 space-y-3">
+              <div className="w-12 h-12 rounded-full bg-primary/10 text-primary flex items-center justify-center">
+                <UserCheck className="w-6 h-6" />
+              </div>
+              <h3 className="font-semibold text-base">Select a Team Member</h3>
+              <p className="text-xs text-muted-foreground max-w-sm">
+                Choose a colleague from the Direct Messages list on the left to start a private one-to-one conversation.
+              </p>
+              <div className="flex flex-wrap gap-2 justify-center max-w-md pt-2">
+                {memberUsers
+                  .filter((m: any) => m.user._id !== currentUserId)
+                  .slice(0, 4)
+                  .map((m: any) => (
+                    <Button
+                      key={m.user._id}
+                      variant="outline"
+                      size="sm"
+                      className="text-xs gap-1.5 h-8"
+                      onClick={() => {
+                        setActiveType("dm");
+                        setActiveDmUser(m.user);
+                      }}
+                    >
+                      <Avatar className="h-4 w-4">
+                        <AvatarImage src={m.user.profilePicture || ""} />
+                        <AvatarFallback className="text-[8px]">
+                          {getAvatarFallbackText(m.user.name)}
+                        </AvatarFallback>
+                      </Avatar>
+                      <span>{m.user.name}</span>
+                    </Button>
+                  ))}
+              </div>
+            </div>
+          ) : isLoadingMessages ? (
             <div className="flex items-center justify-center h-full">
               <Loader className="w-5 h-5 animate-spin text-muted-foreground mr-2" />
               <span className="text-xs text-muted-foreground">
@@ -510,12 +645,14 @@ export default function Messages() {
             </div>
           ) : (
             messages.map((msg: any) => {
-              const senderIdStr = (msg.senderId?._id || msg.senderId)?.toString();
-              const isMe = senderIdStr === user?._id?.toString();
-              const senderName =
-                msg.senderId?.name || (isMe ? user?.name : "Colleague") || "User";
-              const initials = getAvatarFallbackText(senderName);
-              const color = getAvatarColor(senderName);
+              const senderId = extractId(msg.senderId);
+              const isMe = currentUserId ? senderId === currentUserId : false;
+              const senderName = isMe
+                ? "You"
+                : (msg.senderId?.name || (activeType === "dm" ? activeDmUser?.name : null) || "Colleague");
+              const initials = getAvatarFallbackText(isMe ? (user?.name || "You") : senderName);
+              const color = getAvatarColor(isMe ? (user?.name || "You") : senderName);
+              const avatarUrl = isMe ? (user?.profilePicture || "") : (msg.senderId?.profilePicture || "");
 
               return (
                 <div
@@ -525,7 +662,7 @@ export default function Messages() {
                   }`}
                 >
                   <Avatar className="h-7 w-7 shrink-0 mt-0.5">
-                    <AvatarImage src={msg.senderId?.profilePicture || ""} />
+                    <AvatarImage src={avatarUrl} />
                     <AvatarFallback className={`${color} text-[10px]`}>
                       {initials}
                     </AvatarFallback>
@@ -537,8 +674,8 @@ export default function Messages() {
                         isMe ? "justify-end" : ""
                       }`}
                     >
-                      <span className="font-semibold text-foreground">
-                        {isMe ? "You" : senderName}
+                      <span className={`font-semibold ${isMe ? "text-primary" : "text-foreground"}`}>
+                        {senderName}
                       </span>
                       <span>
                         {new Date(msg.createdAt).toLocaleTimeString([], {
@@ -551,8 +688,8 @@ export default function Messages() {
                     <div
                       className={`p-3 rounded-xl text-sm leading-relaxed whitespace-pre-wrap ${
                         isMe
-                          ? "bg-primary text-primary-foreground rounded-tr-none"
-                          : "bg-muted text-foreground rounded-tl-none border"
+                          ? "bg-primary text-primary-foreground rounded-tr-none shadow-xs"
+                          : "bg-muted text-foreground rounded-tl-none border shadow-2xs"
                       }`}
                     >
                       {msg.content}
@@ -632,13 +769,18 @@ export default function Messages() {
             value={messageText}
             onChange={handleInputChange}
             placeholder={placeholderText}
+            disabled={activeType === "dm" && !activeDmUser}
             className="h-10 text-sm bg-background"
           />
 
           <Button
             type="submit"
             size="icon"
-            disabled={isSending || (!messageText.trim() && attachments.length === 0)}
+            disabled={
+              isSending ||
+              (activeType === "dm" && !activeDmUser) ||
+              (!messageText.trim() && attachments.length === 0)
+            }
             className="h-9 w-9 shrink-0"
           >
             <Send className="w-4 h-4" />

@@ -234,3 +234,4 @@ runMessagingVerification().catch((err) => {
   console.error("❌ Messaging verification failed:", err);
   process.exit(1);
 });
+

@@ -97,9 +97,11 @@ const AllMembers = () => {
 
       {members.map((member: any) => {
         const u = member.userId;
+        const uId = (u?._id || u)?.toString();
+        const currentUserId = user?._id?.toString();
         const name = u?.name || "Member";
         const email = u?.email || "";
-        const isSelf = u?._id === user?._id;
+        const isSelf = !!(uId && currentUserId && uId === currentUserId);
         const initials = getAvatarFallbackText(name);
         const avatarColor = getAvatarColor(name);
         const roleName = member.role?.name || "MEMBER";
@@ -142,7 +144,7 @@ const AllMembers = () => {
                   size="sm"
                   className="h-8 text-xs gap-1"
                   onClick={() =>
-                    navigate(`/workspace/${workspaceId}/messages?dm=${u._id}`)
+                    navigate(`/workspace/${workspaceId}/messages?dm=${uId}`)
                   }
                 >
                   <MessageSquare className="w-3.5 h-3.5" />

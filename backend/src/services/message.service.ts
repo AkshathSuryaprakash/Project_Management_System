@@ -39,9 +39,13 @@ export const getConversationMessagesService = async (
   conversationId: string,
   limit: number = 100
 ) => {
+  const normalizedConvId = conversationId.toLowerCase().startsWith("channel:")
+    ? conversationId.toLowerCase()
+    : conversationId;
+
   // If direct message, ensure the user is part of the conversation
-  if (conversationId.startsWith("dm:")) {
-    const participants = conversationId.replace("dm:", "").split("_");
+  if (normalizedConvId.startsWith("dm:")) {
+    const participants = normalizedConvId.replace("dm:", "").split("_");
     if (!participants.includes(userId.toString())) {
       throw new ForbiddenException("You cannot view this direct message conversation.");
     }
@@ -49,7 +53,7 @@ export const getConversationMessagesService = async (
 
   const messages = await MessageModel.find({
     workspaceId,
-    conversationId,
+    conversationId: normalizedConvId,
   })
     .sort({ createdAt: 1 })
     .limit(limit)
@@ -82,13 +86,15 @@ export const sendMessageService = async (
   let channelName = data.channel;
 
   if (channelName) {
-    convId = `channel:${channelName.toLowerCase()}`;
+    channelName = channelName.toLowerCase();
+    convId = `channel:${channelName}`;
     recipientId = undefined;
   } else if (recipientId) {
     convId = getConversationIdHelper("dm", recipientId, senderId);
   } else if (convId) {
-    if (convId.startsWith("channel:")) {
-      channelName = convId.replace("channel:", "");
+    if (convId.toLowerCase().startsWith("channel:")) {
+      channelName = convId.replace(/channel:/i, "").toLowerCase();
+      convId = `channel:${channelName}`;
       recipientId = undefined;
     } else if (convId.startsWith("dm:")) {
       const parts = convId.replace("dm:", "").split("_");

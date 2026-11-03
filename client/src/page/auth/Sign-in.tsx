@@ -21,13 +21,14 @@ import {
 import { Input } from "@/components/ui/input";
 import Logo from "@/components/logo";
 import GoogleOauthButton from "@/components/auth/google-oauth-button";
-import { useMutation } from "@tanstack/react-query";
+import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { loginMutationFn } from "@/lib/api";
 import { toast } from "@/hooks/use-toast";
 import { Loader } from "lucide-react";
 
 const SignIn = () => {
   const navigate = useNavigate();
+  const queryClient = useQueryClient();
   const [searchParams] = useSearchParams();
   const returnUrl = searchParams.get("returnUrl");
 
@@ -37,7 +38,7 @@ const SignIn = () => {
 
   const formSchema = z.object({
     email: z.string().trim().email("Invalid email address").min(1, {
-      message: "Workspace name is required",
+      message: "Email is required",
     }),
     password: z.string().trim().min(1, {
       message: "Password is required",
@@ -57,8 +58,13 @@ const SignIn = () => {
 
     mutate(values, {
       onSuccess: (data) => {
+        // Clear all previous queries to prevent any cross-account cache contamination
+        queryClient.clear();
+        queryClient.setQueryData(["authUser"], {
+          message: "Logged in successfully",
+          user: data.user,
+        });
         const user = data.user;
-        console.log(user);
         const decodedUrl = returnUrl ? decodeURIComponent(returnUrl) : null;
         navigate(decodedUrl || `/workspace/${user.currentWorkspace}`);
       },
@@ -70,6 +76,11 @@ const SignIn = () => {
         });
       },
     });
+  };
+
+  const setDemoAccount = (email: string) => {
+    form.setValue("email", email);
+    form.setValue("password", "password123");
   };
 
   return (
@@ -164,6 +175,43 @@ const SignIn = () => {
                         Login
                       </Button>
                     </div>
+
+                    {/* Demonstration Accounts Quick-fill */}
+                    <div className="pt-2 border-t">
+                      <p className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wider mb-2 text-center">
+                        Quick Demo Logins
+                      </p>
+                      <div className="grid grid-cols-3 gap-1.5">
+                        <Button
+                          type="button"
+                          variant="outline"
+                          size="sm"
+                          className="text-[11px] h-7 px-1 truncate"
+                          onClick={() => setDemoAccount("akshathdeepa1978@gmail.com")}
+                        >
+                          Akshath (Owner)
+                        </Button>
+                        <Button
+                          type="button"
+                          variant="outline"
+                          size="sm"
+                          className="text-[11px] h-7 px-1 truncate"
+                          onClick={() => setDemoAccount("rahul@example.com")}
+                        >
+                          Rahul
+                        </Button>
+                        <Button
+                          type="button"
+                          variant="outline"
+                          size="sm"
+                          className="text-[11px] h-7 px-1 truncate"
+                          onClick={() => setDemoAccount("guru@example.com")}
+                        >
+                          Guru Prasad
+                        </Button>
+                      </div>
+                    </div>
+
                     <div className="text-center text-sm">
                       Don&apos;t have an account?{" "}
                       <Link
