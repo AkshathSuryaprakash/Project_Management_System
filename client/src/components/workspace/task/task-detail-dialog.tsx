@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState } from "react";
 import {
   Dialog,
   DialogContent,
@@ -8,24 +8,19 @@ import {
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
-import { Input } from "@/components/ui/input";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
 import {
   Calendar,
-  Clock,
   Download,
   FileIcon,
   MessageSquare,
   Paperclip,
   Trash2,
   Upload,
-  Play,
-  Square,
   AlertTriangle,
   CheckCircle2,
   GitBranch,
-  Timer,
   Plus,
   Loader2,
   Hourglass,
@@ -38,10 +33,6 @@ import {
   deleteCommentMutationFn,
   getAttachmentsQueryFn,
   getCommentsQueryFn,
-  getTaskTimeTrackingQueryFn,
-  getActiveTimerQueryFn,
-  startTimeTrackingMutationFn,
-  stopTimeTrackingMutationFn,
   getTaskDependenciesQueryFn,
   addTaskDependencyMutationFn,
   removeTaskDependencyMutationFn,
@@ -73,9 +64,7 @@ export function TaskDetailDialog({
 
   const [commentText, setCommentText] = useState("");
   const [isUploading, setIsUploading] = useState(false);
-  const [timerNote, setTimerNote] = useState("");
   const [selectedDependencyId, setSelectedDependencyId] = useState<string>("");
-  const [elapsedTime, setElapsedTime] = useState(0);
 
   const taskId = task?._id;
 
@@ -97,20 +86,6 @@ export function TaskDetailDialog({
     enabled: !!workspaceId && !!taskId && open,
   });
 
-  // Time Tracking Query for this task
-  const { data: timeData } = useQuery({
-    queryKey: ["time-entries", workspaceId, taskId],
-    queryFn: () => getTaskTimeTrackingQueryFn(workspaceId, taskId),
-    enabled: !!workspaceId && !!taskId && open,
-  });
-
-  // Global Active Timer Query for the current user
-  const { data: globalTimerData } = useQuery({
-    queryKey: ["active-timer", workspaceId],
-    queryFn: () => getActiveTimerQueryFn(workspaceId),
-    enabled: !!workspaceId && open,
-  });
-
   // Task Dependencies Query
   const { data: dependenciesData } = useQuery({
     queryKey: ["task-dependencies", workspaceId, taskId],
@@ -120,11 +95,6 @@ export function TaskDetailDialog({
 
   const comments = commentsData?.comments || [];
   const attachments = attachmentsData?.attachments || [];
-  const timeEntries = timeData?.entries || [];
-  const taskActiveTimer = timeData?.activeTimer || null;
-  const globalActiveTimer = globalTimerData?.activeTimer || null;
-  const totalDurationSeconds = timeData?.totalDuration || 0;
-  const formattedTotalDuration = timeData?.formattedTotalDuration || "0s";
 
   const dependencies = dependenciesData?.dependencies || [];
   const dependents = dependenciesData?.dependents || [];
@@ -134,105 +104,6 @@ export function TaskDetailDialog({
     isReady: true,
     hasOverdueDependency: false,
     message: "Ready to proceed.",
-  };
-
-  // Is there an active timer running on THIS specific task?
-  const isTimerRunningOnThisTask = !!taskActiveTimer;
-
-  // Is there an active timer running on ANOTHER task?
-  const isTimerRunningOnAnotherTask =
-    globalActiveTimer &&
-    globalActiveTimer.taskId?._id?.toString() !== taskId?.toString();
-
-  // ==========================================
-  // LIVE TIMER TICKER
-  // ==========================================
-  useEffect(() => {
-    if (!taskActiveTimer) {
-      setElapsedTime(0);
-      return;
-    }
-
-    const startMs = new Date(taskActiveTimer.startTime).getTime();
-    const update = () => {
-      const diff = Math.max(0, Math.floor((Date.now() - startMs) / 1000));
-      setElapsedTime(diff);
-    };
-
-    update();
-    const interval = setInterval(update, 1000);
-    return () => clearInterval(interval);
-  }, [taskActiveTimer?.startTime, taskActiveTimer]);
-
-  const formatHHMMSS = (sec: number) => {
-    const h = Math.floor(sec / 3600);
-    const m = Math.floor((sec % 3600) / 60);
-    const s = sec % 60;
-    return `${h.toString().padStart(2, "0")}:${m
-      .toString()
-      .padStart(2, "0")}:${s.toString().padStart(2, "0")}`;
-  };
-
-  // ==========================================
-  // MUTATIONS: TIME TRACKING
-  // ==========================================
-
-  const { mutate: startTimer, isPending: isStartingTimer } = useMutation({
-    mutationFn: startTimeTrackingMutationFn,
-    onSuccess: () => {
-      setTimerNote("");
-      queryClient.invalidateQueries({ queryKey: ["time-entries", workspaceId, taskId] });
-      queryClient.invalidateQueries({ queryKey: ["active-timer", workspaceId] });
-      toast({
-        title: "Timer Started",
-        description: `Now tracking time for ${task?.title || "this task"}.`,
-        variant: "success",
-      });
-    },
-    onError: (err: any) => {
-      toast({
-        title: "Cannot start timer",
-        description: err.response?.data?.message || err.message,
-        variant: "destructive",
-      });
-    },
-  });
-
-  const { mutate: stopTimer, isPending: isStoppingTimer } = useMutation({
-    mutationFn: stopTimeTrackingMutationFn,
-    onSuccess: (data: any) => {
-      queryClient.invalidateQueries({ queryKey: ["time-entries", workspaceId, taskId] });
-      queryClient.invalidateQueries({ queryKey: ["active-timer", workspaceId] });
-      const sec = data?.entry?.duration || 0;
-      toast({
-        title: "Timer Stopped",
-        description: `Logged ${formatHHMMSS(sec)} of work.`,
-        variant: "success",
-      });
-    },
-    onError: (err: any) => {
-      toast({
-        title: "Error stopping timer",
-        description: err.response?.data?.message || err.message,
-        variant: "destructive",
-      });
-    },
-  });
-
-  const handleStartTimer = () => {
-    startTimer({
-      workspaceId,
-      taskId,
-      description: timerNote.trim() || undefined,
-    });
-  };
-
-  const handleStopTimer = () => {
-    stopTimer({
-      workspaceId,
-      taskId,
-      timeEntryId: taskActiveTimer?._id,
-    });
   };
 
   // ==========================================
@@ -431,14 +302,6 @@ export function TaskDetailDialog({
               </Badge>
               <Badge variant="secondary">{task.status}</Badge>
             </div>
-
-            {/* Quick Live Timer pill in header */}
-            {isTimerRunningOnThisTask && (
-              <div className="flex items-center gap-2 bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/30 px-2.5 py-1 rounded-full text-xs font-mono font-bold animate-pulse">
-                <span className="h-2 w-2 rounded-full bg-emerald-500" />
-                <span>{formatHHMMSS(elapsedTime)}</span>
-              </div>
-            )}
           </div>
 
           <DialogTitle className="text-xl font-bold mt-2 leading-snug">
@@ -448,17 +311,8 @@ export function TaskDetailDialog({
 
         <div className="p-6 overflow-y-auto flex-1">
           <Tabs defaultValue="details" className="w-full">
-            <TabsList className="grid w-full grid-cols-5 mb-4">
+            <TabsList className="grid w-full grid-cols-4 mb-4">
               <TabsTrigger value="details">Details</TabsTrigger>
-              <TabsTrigger value="time" className="flex items-center gap-1.5">
-                <Timer className="w-3.5 h-3.5" />
-                <span>Time</span>
-                {totalDurationSeconds > 0 && (
-                  <span className="text-[10px] bg-muted px-1 rounded font-normal">
-                    {formattedTotalDuration}
-                  </span>
-                )}
-              </TabsTrigger>
               <TabsTrigger value="dependencies" className="flex items-center gap-1.5">
                 <GitBranch className="w-3.5 h-3.5" />
                 <span>Deps</span>
@@ -525,7 +379,7 @@ export function TaskDetailDialog({
                 </p>
               </div>
 
-              <div className="grid grid-cols-2 gap-4 text-sm bg-muted/20 p-4 rounded-lg border">
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 text-sm bg-muted/20 p-4 rounded-lg border">
                 <div>
                   <span className="text-xs text-muted-foreground block mb-1">
                     Project
@@ -568,199 +422,11 @@ export function TaskDetailDialog({
                     </span>
                   </div>
                 </div>
-
-                <div>
-                  <span className="text-xs text-muted-foreground block mb-1">
-                    Time Tracked
-                  </span>
-                  <div className="flex items-center gap-1.5 font-medium">
-                    <Clock className="w-4 h-4 text-muted-foreground" />
-                    <span>{formattedTotalDuration}</span>
-                    {isTimerRunningOnThisTask && (
-                      <span className="text-[10px] bg-emerald-500/10 text-emerald-600 font-bold px-1.5 py-0.5 rounded">
-                        Active
-                      </span>
-                    )}
-                  </div>
-                </div>
               </div>
             </TabsContent>
 
             {/* ============================================================== */}
-            {/* TAB 2: TIME TRACKING (FEATURE 1) */}
-            {/* ============================================================== */}
-            <TabsContent value="time" className="space-y-4">
-              {/* Active Timer Control Panel */}
-              <div className="p-4 rounded-xl border bg-card shadow-2xs space-y-4">
-                <div className="flex items-center justify-between">
-                  <div className="flex items-center gap-2">
-                    <Timer className="w-5 h-5 text-primary" />
-                    <h3 className="font-semibold text-sm">Task Time Tracker</h3>
-                  </div>
-
-                  {isTimerRunningOnThisTask ? (
-                    <Badge className="bg-emerald-500 hover:bg-emerald-600 text-white font-mono gap-1 text-xs px-2.5 py-1">
-                      <span className="h-2 w-2 rounded-full bg-white animate-pulse" />
-                      TIMER RUNNING
-                    </Badge>
-                  ) : (
-                    <Badge variant="outline" className="text-xs text-muted-foreground">
-                      TIMER IDLE
-                    </Badge>
-                  )}
-                </div>
-
-                {/* Live Stopwatch Clock Display */}
-                <div className="flex flex-col items-center justify-center p-4 bg-muted/30 rounded-lg border">
-                  <div className="text-4xl sm:text-5xl font-mono font-bold tracking-wider text-foreground">
-                    {isTimerRunningOnThisTask ? formatHHMMSS(elapsedTime) : "00:00:00"}
-                  </div>
-                  <span className="text-xs text-muted-foreground mt-1">
-                    {isTimerRunningOnThisTask
-                      ? `Started at ${new Date(taskActiveTimer.startTime).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}`
-                      : `Total logged: ${formattedTotalDuration}`}
-                  </span>
-                </div>
-
-                {/* Notice if timer running on another task */}
-                {isTimerRunningOnAnotherTask && (
-                  <div className="p-3 bg-amber-500/10 border border-amber-500/30 rounded-lg text-xs text-amber-800 dark:text-amber-300 flex items-start gap-2">
-                    <AlertTriangle className="w-4 h-4 shrink-0 mt-0.5" />
-                    <div>
-                      You currently have an active timer running on task{" "}
-                      <span className="font-bold">
-                        "{globalActiveTimer.taskId?.title || "another task"}"
-                      </span>
-                      . Please stop it before starting a timer on this task.
-                    </div>
-                  </div>
-                )}
-
-                {/* Start / Stop Controls */}
-                <div className="flex flex-col sm:flex-row gap-2">
-                  {!isTimerRunningOnThisTask ? (
-                    <>
-                      <Input
-                        placeholder="Session notes (e.g. debugging, documentation)..."
-                        value={timerNote}
-                        onChange={(e) => setTimerNote(e.target.value)}
-                        disabled={isStartingTimer || !!isTimerRunningOnAnotherTask}
-                        className="h-9 text-xs"
-                      />
-                      <Button
-                        size="sm"
-                        disabled={isStartingTimer || !!isTimerRunningOnAnotherTask}
-                        onClick={handleStartTimer}
-                        className="gap-1.5 bg-emerald-600 hover:bg-emerald-700 text-white shrink-0"
-                      >
-                        {isStartingTimer ? (
-                          <Loader2 className="w-4 h-4 animate-spin" />
-                        ) : (
-                          <Play className="w-4 h-4 fill-current" />
-                        )}
-                        <span>Start Timer</span>
-                      </Button>
-                    </>
-                  ) : (
-                    <Button
-                      size="sm"
-                      disabled={isStoppingTimer}
-                      onClick={handleStopTimer}
-                      variant="destructive"
-                      className="w-full gap-2 font-semibold h-10"
-                    >
-                      {isStoppingTimer ? (
-                        <Loader2 className="w-4 h-4 animate-spin" />
-                      ) : (
-                        <Square className="w-4 h-4 fill-current" />
-                      )}
-                      <span>Stop Timer & Save Session</span>
-                    </Button>
-                  )}
-                </div>
-              </div>
-
-              {/* Time Tracking History */}
-              <div className="space-y-3">
-                <div className="flex items-center justify-between border-b pb-2">
-                  <h4 className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">
-                    Work Sessions ({timeEntries.length})
-                  </h4>
-                  <span className="text-xs font-medium text-foreground">
-                    Total: <span className="font-bold text-primary">{formattedTotalDuration}</span>
-                  </span>
-                </div>
-
-                <div className="space-y-2 max-h-56 overflow-y-auto pr-1">
-                  {timeEntries.length === 0 ? (
-                    <div className="text-center py-6 text-xs text-muted-foreground space-y-1">
-                      <Clock className="w-6 h-6 mx-auto opacity-40 mb-1" />
-                      <p>No work sessions recorded yet.</p>
-                      <p>Click "Start Timer" above to track time on this task.</p>
-                    </div>
-                  ) : (
-                    timeEntries.map((entry: any) => {
-                      const u = entry.userId;
-                      const uName = u?.name || "Member";
-                      const color = getAvatarColor(uName);
-                      const fInitials = getAvatarFallbackText(uName);
-
-                      return (
-                        <div
-                          key={entry._id}
-                          className="flex items-center justify-between p-2.5 rounded-lg border bg-muted/20 text-xs"
-                        >
-                          <div className="flex items-center gap-2.5 min-w-0">
-                            <Avatar className="h-6 w-6 shrink-0">
-                              <AvatarImage src={u?.profilePicture || ""} />
-                              <AvatarFallback className={`${color} text-[9px]`}>
-                                {fInitials}
-                              </AvatarFallback>
-                            </Avatar>
-                            <div className="truncate">
-                              <p className="font-semibold text-foreground truncate">
-                                {uName}
-                              </p>
-                              {entry.description && (
-                                <p className="text-[11px] text-muted-foreground truncate">
-                                  {entry.description}
-                                </p>
-                              )}
-                              <p className="text-[10px] text-muted-foreground mt-0.5">
-                                {new Date(entry.startTime).toLocaleDateString(undefined, {
-                                  month: "short",
-                                  day: "numeric",
-                                  year: "numeric",
-                                })}
-                                {" • "}
-                                {new Date(entry.startTime).toLocaleTimeString([], {
-                                  hour: "2-digit",
-                                  minute: "2-digit",
-                                })}
-                                {entry.endTime &&
-                                  ` - ${new Date(entry.endTime).toLocaleTimeString([], {
-                                    hour: "2-digit",
-                                    minute: "2-digit",
-                                  })}`}
-                              </p>
-                            </div>
-                          </div>
-
-                          <div className="shrink-0 text-right">
-                            <Badge variant="outline" className="font-mono font-semibold">
-                              {formatHHMMSS(entry.duration || 0)}
-                            </Badge>
-                          </div>
-                        </div>
-                      );
-                    })
-                  )}
-                </div>
-              </div>
-            </TabsContent>
-
-            {/* ============================================================== */}
-            {/* TAB 3: DEPENDENCIES (FEATURE 2) */}
+            {/* TAB: DEPENDENCIES */}
             {/* ============================================================== */}
             <TabsContent value="dependencies" className="space-y-4">
               {/* Status Banner */}

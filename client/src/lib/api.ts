@@ -474,62 +474,18 @@ export const searchWorkspaceQueryFn = async (
 };
 
 // ==========================================
-// FEATURE 1: TASK TIME TRACKING APIs
+// WORKSPACE MEMBERS WORKLOAD (ADMIN ONLY)
 // ==========================================
 
-export const startTimeTrackingMutationFn = async ({
-  workspaceId,
-  taskId,
-  description,
-}: {
-  workspaceId: string;
-  taskId: string;
-  description?: string;
-}) => {
-  const response = await API.post("/time-tracking/start", {
-    workspaceId,
-    taskId,
-    description,
-  });
-  return response.data;
-};
-
-export const stopTimeTrackingMutationFn = async ({
-  workspaceId,
-  taskId,
-  timeEntryId,
-}: {
-  workspaceId: string;
-  taskId?: string;
-  timeEntryId?: string;
-}) => {
-  const response = await API.post("/time-tracking/stop", {
-    workspaceId,
-    taskId,
-    timeEntryId,
-  });
-  return response.data;
-};
-
-export const getTaskTimeTrackingQueryFn = async (
-  workspaceId: string,
-  taskId: string
+export const getWorkspaceMembersWorkloadQueryFn = async (
+  workspaceId: string
 ) => {
-  const response = await API.get(
-    `/time-tracking/task/${taskId}?workspaceId=${workspaceId}`
-  );
-  return response.data;
-};
-
-export const getActiveTimerQueryFn = async (workspaceId: string) => {
-  const response = await API.get(
-    `/time-tracking/active?workspaceId=${workspaceId}`
-  );
+  const response = await API.get(`/workspace/${workspaceId}/members/workload`);
   return response.data;
 };
 
 // ==========================================
-// FEATURE 2: TASK DEPENDENCIES APIs
+// TASK DEPENDENCIES APIs
 // ==========================================
 
 export const getTaskDependenciesQueryFn = async (

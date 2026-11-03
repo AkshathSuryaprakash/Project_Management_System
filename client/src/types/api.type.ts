@@ -284,43 +284,72 @@ export type AllTaskResponseType = {
   pagination: PaginationType;
 };
 
-// TIME TRACKING TYPES
-export type TimeEntryType = {
+// WORKSPACE MEMBER WORKLOAD & PERFORMANCE TYPES (ADMIN ONLY)
+export type MemberCompletedTaskItem = {
   _id: string;
-  workspaceId: string;
-  projectId: string;
-  taskId: {
+  taskCode: string;
+  title: string;
+  priority: TaskPriorityEnumType;
+  project: {
     _id: string;
-    title: string;
-    taskCode: string;
-    status: TaskStatusEnumType;
+    name: string;
+    emoji: string;
   };
-  userId: {
+  dueDate?: string | null;
+  completedAt?: string;
+};
+
+export type MemberPendingTaskItem = {
+  _id: string;
+  taskCode: string;
+  title: string;
+  status: TaskStatusEnumType;
+  priority: TaskPriorityEnumType;
+  project: {
+    _id: string;
+    name: string;
+    emoji: string;
+  };
+  dueDate?: string | null;
+  isOverdue: boolean;
+};
+
+export type MemberWorkloadType = {
+  memberId: string;
+  user: {
     _id: string;
     name: string;
     email: string;
     profilePicture: string | null;
   };
-  startTime: string;
-  endTime: string | null;
-  duration: number; // in seconds
-  status: "RUNNING" | "COMPLETED";
-  description?: string | null;
-  createdAt: string;
-  updatedAt: string;
+  role: string;
+  joinedAt: string;
+  totalTasks: number;
+  completedCount: number;
+  pendingCount: number;
+  overdueCount: number;
+  successRatio: number;
+  isOverloaded: boolean;
+  workloadLevel: "LIGHT" | "MODERATE" | "HIGH" | "OVERLOADED";
+  completedTasks: MemberCompletedTaskItem[];
+  pendingTasks: MemberPendingTaskItem[];
 };
 
-export type TaskTimeEntriesResponseType = {
-  message: string;
-  entries: TimeEntryType[];
-  activeTimer: TimeEntryType | null;
-  totalDuration: number;
-  formattedTotalDuration: string;
+export type MemberWorkloadSummaryType = {
+  totalMembers: number;
+  overloadedMembersCount: number;
+  totalAssignedTasks: number;
+  totalCompleted: number;
+  totalPending: number;
+  totalOverdue: number;
+  averageSuccessRatio: number;
+  overloadThreshold: number;
 };
 
-export type ActiveTimerResponseType = {
+export type WorkspaceMembersWorkloadResponseType = {
   message: string;
-  activeTimer: TimeEntryType | null;
+  summary: MemberWorkloadSummaryType;
+  members: MemberWorkloadType[];
 };
 
 // TASK DEPENDENCIES TYPES

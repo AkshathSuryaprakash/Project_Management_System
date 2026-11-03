@@ -13,6 +13,7 @@ import AttachmentModel from "../models/attachment.model";
 import MessageModel from "../models/message.model";
 import ActivityLogModel from "../models/activity-log.model";
 import NotificationModel from "../models/notification.model";
+import { getMemberRoleInWorkspace } from "./member.service";
 
 //********************************
 // CREATE NEW WORKSPACE
@@ -248,5 +249,184 @@ export const deleteWorkspaceService = async (
 
   return {
     currentWorkspace: user ? user.currentWorkspace : null,
+  };
+};
+
+//*************************************************
+// GET WORKSPACE MEMBERS WORKLOAD (ADMIN ONLY)
+//************************************************/
+export const getWorkspaceMembersWorkloadService = async (
+  workspaceId: string,
+  userId: string
+) => {
+  // 1. Strict RBAC verification: Only OWNER or ADMIN can view member workload analytics
+  const { role } = await getMemberRoleInWorkspace(userId, workspaceId);
+  if (role !== Roles.OWNER && role !== Roles.ADMIN) {
+    throw new ForbiddenException(
+      "Only workspace administrators can view member workload and task performance analytics"
+    );
+  }
+
+  // 2. Fetch all members in this workspace
+  const members = await MemberModel.find({ workspaceId })
+    .populate("userId", "name email profilePicture")
+    .populate("role", "name")
+    .lean();
+
+  // 3. Fetch all tasks in this workspace with project details
+  const tasks = await TaskModel.find({ workspace: workspaceId })
+    .populate("project", "name emoji")
+    .sort({ updatedAt: -1 })
+    .lean();
+
+  const now = new Date();
+  const OVERLOAD_THRESHOLD = 5; // MCA standard threshold (>= 5 active pending tasks)
+
+  // 4. Map workload per member
+  const memberWorkloadList = members
+    .filter((m: any) => m && m.userId)
+    .map((m: any) => {
+      const u = m.userId;
+      const uId = u._id.toString();
+
+      // Find all tasks assigned to this user
+      const memberTasks = tasks.filter(
+        (t: any) => t.assignedTo && t.assignedTo.toString() === uId
+      );
+
+      // Completed tasks
+      const completedTasks = memberTasks.filter(
+        (t: any) =>
+          t.status === TaskStatusEnum.DONE ||
+          t.status === "COMPLETED" ||
+          t.status === "FINISHED"
+      );
+
+      // Pending / Active tasks (TODO, IN_PROGRESS, IN_REVIEW, BACKLOG)
+      const pendingTasks = memberTasks.filter(
+        (t: any) =>
+          t.status !== TaskStatusEnum.DONE &&
+          t.status !== "COMPLETED" &&
+          t.status !== "FINISHED"
+      );
+
+      // Overdue tasks: dueDate < now and not completed
+      const overdueTasks = memberTasks.filter(
+        (t: any) =>
+          t.dueDate &&
+          new Date(t.dueDate) < now &&
+          t.status !== TaskStatusEnum.DONE &&
+          t.status !== "COMPLETED" &&
+          t.status !== "FINISHED"
+      );
+
+      const totalTasks = memberTasks.length;
+      const completedCount = completedTasks.length;
+      const pendingCount = pendingTasks.length;
+      const overdueCount = overdueTasks.length;
+
+      // Success ratio (completion percentage)
+      const successRatio =
+        totalTasks > 0 ? Math.round((completedCount / totalTasks) * 100) : 0;
+
+      // Overloaded identification
+      const isOverloaded = pendingCount >= OVERLOAD_THRESHOLD;
+      const workloadLevel =
+        pendingCount >= OVERLOAD_THRESHOLD
+          ? "OVERLOADED"
+          : pendingCount >= 3
+          ? "HIGH"
+          : pendingCount >= 1
+          ? "MODERATE"
+          : "LIGHT";
+
+      return {
+        memberId: m._id,
+        user: {
+          _id: u._id,
+          name: u.name,
+          email: u.email,
+          profilePicture: u.profilePicture || null,
+        },
+        role: m.role?.name || "MEMBER",
+        joinedAt: m.joinedAt || m.createdAt,
+        totalTasks,
+        completedCount,
+        pendingCount,
+        overdueCount,
+        successRatio,
+        isOverloaded,
+        workloadLevel,
+        completedTasks: completedTasks.map((t: any) => ({
+          _id: t._id,
+          taskCode: t.taskCode,
+          title: t.title,
+          priority: t.priority,
+          project: {
+            _id: t.project?._id,
+            name: t.project?.name || "Project",
+            emoji: t.project?.emoji || "📊",
+          },
+          dueDate: t.dueDate,
+          completedAt: t.updatedAt,
+        })),
+        pendingTasks: pendingTasks.map((t: any) => ({
+          _id: t._id,
+          taskCode: t.taskCode,
+          title: t.title,
+          status: t.status,
+          priority: t.priority,
+          project: {
+            _id: t.project?._id,
+            name: t.project?.name || "Project",
+            emoji: t.project?.emoji || "📊",
+          },
+          dueDate: t.dueDate,
+          isOverdue: !!(t.dueDate && new Date(t.dueDate) < now),
+        })),
+      };
+    });
+
+  // Sort overloaded members first, then by pending task count descending
+  memberWorkloadList.sort((a, b) => {
+    if (a.isOverloaded && !b.isOverloaded) return -1;
+    if (!a.isOverloaded && b.isOverloaded) return 1;
+    return b.pendingCount - a.pendingCount;
+  });
+
+  const totalAssignedTasks = memberWorkloadList.reduce(
+    (acc, m) => acc + m.totalTasks,
+    0
+  );
+  const totalCompleted = memberWorkloadList.reduce(
+    (acc, m) => acc + m.completedCount,
+    0
+  );
+  const totalPending = memberWorkloadList.reduce(
+    (acc, m) => acc + m.pendingCount,
+    0
+  );
+  const totalOverdue = memberWorkloadList.reduce(
+    (acc, m) => acc + m.overdueCount,
+    0
+  );
+  const overloadedCount = memberWorkloadList.filter((m) => m.isOverloaded).length;
+  const averageSuccessRatio =
+    totalAssignedTasks > 0
+      ? Math.round((totalCompleted / totalAssignedTasks) * 100)
+      : 0;
+
+  return {
+    summary: {
+      totalMembers: memberWorkloadList.length,
+      overloadedMembersCount: overloadedCount,
+      totalAssignedTasks,
+      totalCompleted,
+      totalPending,
+      totalOverdue,
+      averageSuccessRatio,
+      overloadThreshold: OVERLOAD_THRESHOLD,
+    },
+    members: memberWorkloadList,
   };
 };

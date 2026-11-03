@@ -7,6 +7,7 @@ import {
   getWorkspaceAnalyticsController,
   getWorkspaceByIdController,
   getWorkspaceMembersController,
+  getWorkspaceMembersWorkloadController,
   resetInviteCodeController,
   updateWorkspaceByIdController,
 } from "../controllers/workspace.controller";
@@ -29,6 +30,8 @@ workspaceRoutes.delete("/delete/:id", deleteWorkspaceByIdController);
 workspaceRoutes.get("/all", getAllWorkspacesUserIsMemberController);
 
 workspaceRoutes.get("/members/:id", getWorkspaceMembersController);
+workspaceRoutes.get("/members/:id/workload", getWorkspaceMembersWorkloadController);
+workspaceRoutes.get("/:id/members/workload", getWorkspaceMembersWorkloadController);
 workspaceRoutes.get("/analytics/:id", getWorkspaceAnalyticsController);
 
 workspaceRoutes.get("/:id", getWorkspaceByIdController);

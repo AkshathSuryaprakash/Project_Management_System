@@ -15,6 +15,7 @@ import {
   getWorkspaceAnalyticsService,
   getWorkspaceByIdService,
   getWorkspaceMembersService,
+  getWorkspaceMembersWorkloadService,
   resetInviteCodeService,
   updateWorkspaceByIdService,
 } from "../services/workspace.service";
@@ -183,6 +184,20 @@ export const resetInviteCodeController = asyncHandler(
     return res.status(HTTPSTATUS.OK).json({
       message: "Invite code reset successfully",
       inviteCode,
+    });
+  }
+);
+
+export const getWorkspaceMembersWorkloadController = asyncHandler(
+  async (req: Request, res: Response) => {
+    const workspaceId = workspaceIdSchema.parse(req.params.id);
+    const userId = req.user?._id;
+
+    const data = await getWorkspaceMembersWorkloadService(workspaceId, userId);
+
+    return res.status(HTTPSTATUS.OK).json({
+      message: "Workspace members workload retrieved successfully",
+      ...data,
     });
   }
 );
