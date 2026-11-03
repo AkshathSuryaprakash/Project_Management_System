@@ -13,10 +13,13 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import RecentProjects from "@/components/workspace/project/recent-projects";
 import RecentTasks from "@/components/workspace/task/recent-tasks";
 import RecentMembers from "@/components/workspace/member/recent-members";
+import MyTasksPanel from "@/components/workspace/my-tasks-panel";
+import { useAuthContext } from "@/context/auth-provider";
 
 const WorkspaceDashboard = () => {
   const { onOpen } = useCreateProjectDialog();
   const workspaceId = useWorkspaceId();
+  const { user } = useAuthContext();
 
   // Fetch projects
   const { data: projectsResponse } = useQuery({
@@ -88,25 +91,31 @@ const WorkspaceDashboard = () => {
   };
 
   return (
-    <main className="flex flex-1 flex-col py-4 md:pt-3">
-      <div className="flex items-center justify-between space-y-2 mb-6">
+    <main className="flex flex-1 flex-col py-4 md:pt-3 space-y-6">
+      {/* Welcome Banner matching Figure 9.2 */}
+      <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
         <div>
           <h2 className="text-2xl font-bold tracking-tight">
-            Workspace Overview
+            Welcome, {user?.name || "User"}
           </h2>
-          <p className="text-muted-foreground">
+          <p className="text-muted-foreground text-sm">
             Here&apos;s an overview for this workspace!
           </p>
         </div>
-        <Button onClick={onOpen}>
-          <Plus />
+        <Button onClick={onOpen} className="flex items-center gap-1.5">
+          <Plus className="w-4 h-4" />
           New Project
         </Button>
       </div>
+
+      {/* My Tasks Panel matching Figure 9.2 */}
+      <MyTasksPanel tasks={tasks} currentUserId={user?._id} />
+
+      {/* Summary KPI Cards */}
       <WorkspaceAnalytics />
 
-      {/* Charts Section */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mt-6">
+      {/* Charts Section matching Figure 9.3 */}
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
         <TaskDistributionChart
           backlogCount={taskDistribution.backlogCount}
           todoCount={taskDistribution.todoCount}
@@ -121,17 +130,17 @@ const WorkspaceDashboard = () => {
         />
       </div>
 
-      {/* Project Progress */}
+      {/* Project Health matching Figure 9.4 */}
       {projects.length > 0 && (
-        <div className="mt-6">
+        <div>
           <ProjectProgressChart projects={projects} tasks={tasks} />
         </div>
       )}
 
-      {/* Tabs Section */}
-      <div className="mt-6">
-        <Tabs defaultValue="projects" className="w-full border rounded-lg p-2">
-          <TabsList className="w-full justify-start border-0 bg-gray-50 px-1 h-12">
+      {/* Tabs Section: Recent Tasks, Recent Members, Recent Projects */}
+      <div>
+        <Tabs defaultValue="projects" className="w-full border rounded-lg p-2 bg-card">
+          <TabsList className="w-full justify-start border-0 bg-muted/50 px-1 h-12">
             <TabsTrigger className="py-2" value="tasks">
               Recent Tasks
             </TabsTrigger>

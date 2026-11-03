@@ -15,6 +15,7 @@ import {
   getWorkspaceAnalyticsService,
   getWorkspaceByIdService,
   getWorkspaceMembersService,
+  resetInviteCodeService,
   updateWorkspaceByIdService,
 } from "../services/workspace.service";
 import { getMemberRoleInWorkspace } from "../services/member.service";
@@ -165,6 +166,23 @@ export const deleteWorkspaceByIdController = asyncHandler(
     return res.status(HTTPSTATUS.OK).json({
       message: "Workspace deleted successfully",
       currentWorkspace,
+    });
+  }
+);
+
+export const resetInviteCodeController = asyncHandler(
+  async (req: Request, res: Response) => {
+    const workspaceId = workspaceIdSchema.parse(req.params.id);
+    const userId = req.user?._id;
+
+    const { role } = await getMemberRoleInWorkspace(userId, workspaceId);
+    roleGuard(role, [Permissions.ADD_MEMBER]);
+
+    const { inviteCode } = await resetInviteCodeService(workspaceId);
+
+    return res.status(HTTPSTATUS.OK).json({
+      message: "Invite code reset successfully",
+      inviteCode,
     });
   }
 );

@@ -211,9 +211,9 @@ export const editTaskMutationFn = async ({
   projectId,
   workspaceId,
   data,
-}: EditTaskPayloadType): Promise<{message: string;}> => {
+}: EditTaskPayloadType): Promise<{ message: string; task?: any }> => {
   const response = await API.put(
-    `/task/${taskId}/project/${projectId}/workspace/${workspaceId}/update/`,
+    `/task/${taskId}/project/${projectId}/workspace/${workspaceId}/update`,
     data
   );
   return response.data;
@@ -257,7 +257,218 @@ export const deleteTaskMutationFn = async ({
   message: string;
 }> => {
   const response = await API.delete(
-    `task/${taskId}/workspace/${workspaceId}/delete`
+    `/task/${taskId}/workspace/${workspaceId}/delete`
+  );
+  return response.data;
+};
+
+// Reset Workspace Invite Code
+export const resetWorkspaceInviteCodeMutationFn = async (
+  workspaceId: string
+): Promise<{ message: string; inviteCode: string }> => {
+  const response = await API.post(`/workspace/reset/invite-code/${workspaceId}`);
+  return response.data;
+};
+
+// Comments
+export const getCommentsQueryFn = async (
+  workspaceId: string,
+  taskId: string
+) => {
+  const response = await API.get(
+    `/workspace/${workspaceId}/comments/task/${taskId}`
+  );
+  return response.data;
+};
+
+export const createCommentMutationFn = async ({
+  workspaceId,
+  taskId,
+  content,
+}: {
+  workspaceId: string;
+  taskId: string;
+  content: string;
+}) => {
+  const response = await API.post(
+    `/workspace/${workspaceId}/comments/task/${taskId}`,
+    { content }
+  );
+  return response.data;
+};
+
+export const deleteCommentMutationFn = async ({
+  workspaceId,
+  commentId,
+}: {
+  workspaceId: string;
+  commentId: string;
+}) => {
+  const response = await API.delete(
+    `/workspace/${workspaceId}/comments/${commentId}`
+  );
+  return response.data;
+};
+
+// Attachments
+export const getAttachmentsQueryFn = async (
+  workspaceId: string,
+  taskId: string
+) => {
+  const response = await API.get(
+    `/workspace/${workspaceId}/attachments/task/${taskId}`
+  );
+  return response.data;
+};
+
+export const createAttachmentMutationFn = async ({
+  workspaceId,
+  taskId,
+  data,
+}: {
+  workspaceId: string;
+  taskId: string;
+  data: {
+    fileName: string;
+    fileSize: number;
+    fileType: string;
+    fileData: string;
+  };
+}) => {
+  const response = await API.post(
+    `/workspace/${workspaceId}/attachments/task/${taskId}`,
+    data
+  );
+  return response.data;
+};
+
+export const deleteAttachmentMutationFn = async ({
+  workspaceId,
+  attachmentId,
+}: {
+  workspaceId: string;
+  attachmentId: string;
+}) => {
+  const response = await API.delete(
+    `/workspace/${workspaceId}/attachments/${attachmentId}`
+  );
+  return response.data;
+};
+
+// Messaging
+export const getChannelsQueryFn = async (workspaceId: string) => {
+  const response = await API.get(`/workspace/${workspaceId}/messages/channels`);
+  return response.data;
+};
+
+export const getConversationMessagesQueryFn = async (
+  workspaceId: string,
+  conversationId: string
+) => {
+  const response = await API.get(
+    `/workspace/${workspaceId}/messages/conversations/${conversationId}`
+  );
+  return response.data;
+};
+
+export const sendMessageMutationFn = async ({
+  workspaceId,
+  data,
+}: {
+  workspaceId: string;
+  data: {
+    conversationId?: string;
+    channel?: string;
+    recipientId?: string;
+    content: string;
+    attachments?: Array<{
+      fileName: string;
+      fileSize: number;
+      fileType: string;
+      fileData: string;
+    }>;
+    taskRef?: string;
+  };
+}) => {
+  const response = await API.post(
+    `/workspace/${workspaceId}/messages/send`,
+    data
+  );
+  return response.data;
+};
+
+export const markMessagesAsReadMutationFn = async ({
+  workspaceId,
+  conversationId,
+}: {
+  workspaceId: string;
+  conversationId: string;
+}) => {
+  const response = await API.put(`/workspace/${workspaceId}/messages/read`, {
+    conversationId,
+  });
+  return response.data;
+};
+
+// Notifications
+export const getNotificationsQueryFn = async (workspaceId: string) => {
+  const response = await API.get(`/workspace/${workspaceId}/notifications`);
+  return response.data;
+};
+
+export const markNotificationReadMutationFn = async ({
+  workspaceId,
+  id,
+}: {
+  workspaceId: string;
+  id: string;
+}) => {
+  const response = await API.patch(
+    `/workspace/${workspaceId}/notifications/${id}/read`
+  );
+  return response.data;
+};
+
+export const markAllNotificationsReadMutationFn = async (
+  workspaceId: string
+) => {
+  const response = await API.patch(
+    `/workspace/${workspaceId}/notifications/read-all`
+  );
+  return response.data;
+};
+
+// Activity Log
+export const getActivityLogsQueryFn = async (
+  workspaceId: string,
+  limit: number = 50
+) => {
+  const response = await API.get(
+    `/workspace/${workspaceId}/activity?limit=${limit}`
+  );
+  return response.data;
+};
+
+// Reports
+export const getReportsQueryFn = async (workspaceId: string) => {
+  const response = await API.get(`/workspace/${workspaceId}/reports`);
+  return response.data;
+};
+
+export const exportReportsCsvQueryFn = async (workspaceId: string) => {
+  const response = await API.get(`/workspace/${workspaceId}/reports/export`, {
+    responseType: "blob",
+  });
+  return response.data;
+};
+
+// Search
+export const searchWorkspaceQueryFn = async (
+  workspaceId: string,
+  query: string
+) => {
+  const response = await API.get(
+    `/workspace/${workspaceId}/search?query=${encodeURIComponent(query)}`
   );
   return response.data;
 };

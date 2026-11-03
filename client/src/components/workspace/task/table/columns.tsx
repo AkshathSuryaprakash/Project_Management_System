@@ -1,3 +1,4 @@
+import { useState } from "react";
 import { Column, ColumnDef, Row } from "@tanstack/react-table";
 import { format } from "date-fns";
 
@@ -19,6 +20,27 @@ import {
 import { priorities, statuses } from "./data";
 import { TaskType } from "@/types/api.type";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
+import { TaskDetailDialog } from "../task-detail-dialog";
+
+function TaskTitleCell({ task }: { task: TaskType }) {
+  const [open, setOpen] = useState(false);
+  return (
+    <>
+      <div
+        className="flex flex-wrap space-x-2 cursor-pointer hover:opacity-80 transition-opacity"
+        onClick={() => setOpen(true)}
+      >
+        <Badge variant="outline" className="capitalize shrink-0 h-[25px]">
+          {task.taskCode}
+        </Badge>
+        <span className="block lg:max-w-[220px] max-w-[200px] font-medium hover:underline">
+          {task.title}
+        </span>
+      </div>
+      <TaskDetailDialog task={task} open={open} onOpenChange={setOpen} />
+    </>
+  );
+}
 
 export const getColumns = (projectId?: string): ColumnDef<TaskType>[] => {
   const columns: ColumnDef<TaskType>[] = [
@@ -51,18 +73,7 @@ export const getColumns = (projectId?: string): ColumnDef<TaskType>[] => {
       header: ({ column }) => (
         <DataTableColumnHeader column={column} title="Title" />
       ),
-      cell: ({ row }) => {
-        return (
-          <div className="flex flex-wrap space-x-2">
-            <Badge variant="outline" className="capitalize shrink-0 h-[25px]">
-              {row.original.taskCode}
-            </Badge>
-            <span className="block lg:max-w-[220px] max-w-[200px] font-medium">
-              {row.original.title}
-            </span>
-          </div>
-        );
-      },
+      cell: ({ row }) => <TaskTitleCell task={row.original} />,
     },
     ...(projectId
       ? [] // If projectId exists, exclude the "Project" column

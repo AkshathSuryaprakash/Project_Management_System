@@ -67,26 +67,26 @@ async function seed2() {
       console.log(`Setting owner & members for workspace: ${workspace.name}`);
 
       // Ensure akshathdeepa1978@gmail.com is set as owner of the workspace
-      if (!workspace.owner.equals(targetOwner._id)) {
-        workspace.owner = targetOwner._id;
+      if (!workspace.owner.equals((targetOwner as any)._id)) {
+        workspace.owner = (targetOwner as any)._id;
         await workspace.save();
         console.log(` -> Set owner to akshathdeepa1978@gmail.com`);
       }
 
       // Ensure akshathdeepa1978@gmail.com has OWNER membership record
       let ownerMembership = await MemberModel.findOne({
-        userId: targetOwner._id,
+        userId: (targetOwner as any)._id,
         workspaceId: workspace._id,
       });
       if (!ownerMembership) {
         await MemberModel.create({
-          userId: targetOwner._id,
+          userId: (targetOwner as any)._id,
           workspaceId: workspace._id,
-          role: ownerRole._id,
+          role: (ownerRole as any)._id,
         });
         console.log(" -> Created OWNER membership");
-      } else if (!ownerMembership.role.equals(ownerRole._id)) {
-        ownerMembership.role = ownerRole._id;
+      } else if (!ownerMembership.role.equals((ownerRole as any)._id)) {
+        ownerMembership.role = (ownerRole as any)._id;
         await ownerMembership.save();
         console.log(" -> Updated membership to OWNER");
       }
@@ -130,11 +130,11 @@ async function seed2() {
           await MemberModel.create({
             userId: user._id,
             workspaceId: workspace._id,
-            role: memberRole._id,
+            role: (memberRole as any)._id,
           });
           console.log(` -> Added member ${name}`);
-        } else if (existingMember.role.equals(ownerRole._id)) {
-          existingMember.role = memberRole._id;
+        } else if (existingMember.role.equals((ownerRole as any)._id)) {
+          existingMember.role = (memberRole as any)._id;
           await existingMember.save();
           console.log(` -> Demoted ${name} to MEMBER`);
         }

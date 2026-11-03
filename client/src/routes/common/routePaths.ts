@@ -11,6 +11,11 @@ export const AUTH_ROUTES = {
 export const PROTECTED_ROUTES = {
   WORKSPACE: "/workspace/:workspaceId",
   TASKS: "/workspace/:workspaceId/tasks",
+  KANBAN: "/workspace/:workspaceId/kanban",
+  CALENDAR: "/workspace/:workspaceId/calendar",
+  MESSAGES: "/workspace/:workspaceId/messages",
+  REPORTS: "/workspace/:workspaceId/reports",
+  ACTIVITY: "/workspace/:workspaceId/activity",
   MEMBERS: "/workspace/:workspaceId/members",
   SETTINGS: "/workspace/:workspaceId/settings",
   PROJECT_DETAILS: "/workspace/:workspaceId/project/:projectId",

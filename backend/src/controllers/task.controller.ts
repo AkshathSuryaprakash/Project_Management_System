@@ -8,7 +8,7 @@ import {
 import { projectIdSchema } from "../validation/project.validation";
 import { workspaceIdSchema } from "../validation/workspace.validation";
 import { Permissions, Roles } from "../enums/role.enum";
-import { BadRequestException } from "../utils/appError";
+import { ForbiddenException, NotFoundException } from "../utils/appError";
 import { getMemberRoleInWorkspace } from "../services/member.service";
 import { roleGuard } from "../utils/roleGuard";
 import {
@@ -31,11 +31,14 @@ export const createTaskController = asyncHandler(
     const { role } = await getMemberRoleInWorkspace(userId, workspaceId);
     roleGuard(role, [Permissions.CREATE_TASK]);
 
-    // Restrict standard members to only assign tasks to themselves
+    // Critical authorization check:
+    // Members can only assign tasks to themselves (and cannot create unassigned tasks)
     if (role === Roles.MEMBER) {
-      const newAssignedTo = body.assignedTo ? body.assignedTo.toString() : null;
-      if (newAssignedTo !== userId.toString()) {
-        throw new BadRequestException("Members can only assign tasks to themselves.");
+      const requested = body.assignedTo ? body.assignedTo.toString() : null;
+      if (requested !== userId.toString()) {
+        throw new ForbiddenException(
+          "Members can only assign tasks to themselves."
+        );
       }
     }
 
@@ -46,9 +49,16 @@ export const createTaskController = asyncHandler(
       body
     );
 
+    const privileged = role === Roles.OWNER || role === Roles.ADMIN;
+
     return res.status(HTTPSTATUS.OK).json({
       message: "Task created successfully",
       task,
+      permissions: {
+        canEdit: true,
+        canDelete: privileged,
+        canAssign: privileged,
+      },
     });
   }
 );
@@ -58,7 +68,6 @@ export const updateTaskController = asyncHandler(
     const userId = req.user?._id;
 
     const body = updateTaskSchema.parse(req.body);
-
     const taskId = taskIdSchema.parse(req.params.id);
     const projectId = projectIdSchema.parse(req.params.projectId);
     const workspaceId = workspaceIdSchema.parse(req.params.workspaceId);
@@ -66,17 +75,32 @@ export const updateTaskController = asyncHandler(
     const { role } = await getMemberRoleInWorkspace(userId, workspaceId);
     roleGuard(role, [Permissions.EDIT_TASK]);
 
-    // Restrict standard members to only change assignment to themselves
+    // Load existing task
+    const existingTask = await getTaskByIdService(workspaceId, projectId, taskId);
+    if (!existingTask) {
+      throw new NotFoundException("Task not found");
+    }
+
+    const currentAssignedTo = existingTask.assignedTo
+      ? (existingTask.assignedTo as any)._id
+        ? (existingTask.assignedTo as any)._id.toString()
+        : existingTask.assignedTo.toString()
+      : null;
+
+    // Critical authorization checks for MEMBER:
     if (role === Roles.MEMBER) {
+      // 1. Members can only modify tasks assigned to themselves
+      if (currentAssignedTo !== userId.toString()) {
+        throw new ForbiddenException(
+          "Members can only modify tasks assigned to themselves."
+        );
+      }
+
+      // 2. Members cannot reassign tasks
       if (body.assignedTo !== undefined) {
-        const task = await getTaskByIdService(workspaceId, projectId, taskId);
         const newAssignedTo = body.assignedTo ? body.assignedTo.toString() : null;
-        const currentAssignedTo = task.assignedTo ? (task.assignedTo as any)._id?.toString() || task.assignedTo.toString() : null;
-        
         if (newAssignedTo !== currentAssignedTo) {
-          if (newAssignedTo !== userId.toString()) {
-            throw new BadRequestException("Members can only assign tasks to themselves.");
-          }
+          throw new ForbiddenException("Members cannot reassign tasks.");
         }
       }
     }
@@ -85,6 +109,7 @@ export const updateTaskController = asyncHandler(
       workspaceId,
       projectId,
       taskId,
+      userId.toString(),
       body
     );
 
@@ -98,7 +123,6 @@ export const updateTaskController = asyncHandler(
 export const getAllTasksController = asyncHandler(
   async (req: Request, res: Response) => {
     const userId = req.user?._id;
-
     const workspaceId = workspaceIdSchema.parse(req.params.workspaceId);
 
     const filters = {
@@ -146,9 +170,25 @@ export const getTaskByIdController = asyncHandler(
 
     const task = await getTaskByIdService(workspaceId, projectId, taskId);
 
+    const currentAssignedTo = task.assignedTo
+      ? (task.assignedTo as any)._id
+        ? (task.assignedTo as any)._id.toString()
+        : task.assignedTo.toString()
+      : null;
+
+    const isOwnerOrAdmin = role === Roles.OWNER || role === Roles.ADMIN;
+    const isAssignedMember = role === Roles.MEMBER && currentAssignedTo === userId.toString();
+
+    const permissions = {
+      canEdit: isOwnerOrAdmin || isAssignedMember,
+      canDelete: isOwnerOrAdmin,
+      canAssign: isOwnerOrAdmin,
+    };
+
     return res.status(HTTPSTATUS.OK).json({
       message: "Task fetched successfully",
       task,
+      permissions,
     });
   }
 );
@@ -161,9 +201,15 @@ export const deleteTaskController = asyncHandler(
     const workspaceId = workspaceIdSchema.parse(req.params.workspaceId);
 
     const { role } = await getMemberRoleInWorkspace(userId, workspaceId);
+
+    // If role is MEMBER, reject with specific 403 message matching Test T3
+    if (role === Roles.MEMBER) {
+      throw new ForbiddenException("Members cannot delete tasks.");
+    }
+
     roleGuard(role, [Permissions.DELETE_TASK]);
 
-    await deleteTaskService(workspaceId, taskId);
+    await deleteTaskService(workspaceId, taskId, userId.toString());
 
     return res.status(HTTPSTATUS.OK).json({
       message: "Task deleted successfully",

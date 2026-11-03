@@ -7,6 +7,7 @@ import {
   getWorkspaceAnalyticsController,
   getWorkspaceByIdController,
   getWorkspaceMembersController,
+  resetInviteCodeController,
   updateWorkspaceByIdController,
 } from "../controllers/workspace.controller";
 
@@ -14,6 +15,9 @@ const workspaceRoutes = Router();
 
 workspaceRoutes.post("/create/new", createWorkspaceController);
 workspaceRoutes.put("/update/:id", updateWorkspaceByIdController);
+workspaceRoutes.put("/reset/invite-code/:id", resetInviteCodeController);
+workspaceRoutes.post("/reset/invite-code/:id", resetInviteCodeController);
+workspaceRoutes.patch("/reset/invite-code/:id", resetInviteCodeController);
 
 workspaceRoutes.put(
   "/change/member/role/:id",

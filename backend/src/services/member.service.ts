@@ -5,6 +5,7 @@ import RoleModel from "../models/roles-permission.model";
 import WorkspaceModel from "../models/workspace.model";
 import {
   BadRequestException,
+  ForbiddenException,
   NotFoundException,
   UnauthorizedException,
 } from "../utils/appError";
@@ -24,9 +25,9 @@ export const getMemberRoleInWorkspace = async (
   }).populate("role");
 
   if (!member) {
-    throw new UnauthorizedException(
+    throw new ForbiddenException(
       "You are not a member of this workspace",
-      ErrorCodeEnum.ACCESS_UNAUTHORIZED
+      ErrorCodeEnum.ACCESS_FORBIDDEN
     );
   }
 

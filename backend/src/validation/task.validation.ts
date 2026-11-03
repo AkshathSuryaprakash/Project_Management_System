@@ -1,8 +1,8 @@
 import { z } from "zod";
 import { TaskPriorityEnum, TaskStatusEnum } from "../enums/task.enum";
 
-export const titleSchema = z.string().trim().min(1).max(255);
-export const descriptionSchema = z.string().trim().optional();
+export const titleSchema = z.string().trim().min(1, "Task title is required").max(255);
+export const descriptionSchema = z.string().trim().optional().nullable();
 
 export const assignedToSchema = z.string().trim().min(1).nullable().optional();
 
@@ -18,6 +18,7 @@ export const dueDateSchema = z
   .string()
   .trim()
   .optional()
+  .nullable()
   .refine(
     (val) => {
       return !val || !isNaN(Date.parse(val));
@@ -32,17 +33,23 @@ export const taskIdSchema = z.string().trim().min(1);
 export const createTaskSchema = z.object({
   title: titleSchema,
   description: descriptionSchema,
-  priority: prioritySchema,
-  status: statusSchema,
+  priority: prioritySchema.optional(),
+  status: statusSchema.optional(),
   assignedTo: assignedToSchema,
   dueDate: dueDateSchema,
+  dependsOn: z.array(z.string()).optional(),
+  tags: z.array(z.string()).optional(),
+  recurrence: z.enum(["NONE", "DAILY", "WEEKLY", "MONTHLY"]).optional(),
 });
 
 export const updateTaskSchema = z.object({
-  title: titleSchema,
+  title: titleSchema.optional(),
   description: descriptionSchema,
-  priority: prioritySchema,
-  status: statusSchema,
+  priority: prioritySchema.optional(),
+  status: statusSchema.optional(),
   assignedTo: assignedToSchema,
   dueDate: dueDateSchema,
+  dependsOn: z.array(z.string()).optional(),
+  tags: z.array(z.string()).optional(),
+  recurrence: z.enum(["NONE", "DAILY", "WEEKLY", "MONTHLY"]).optional(),
 });

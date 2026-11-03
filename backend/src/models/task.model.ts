@@ -18,6 +18,9 @@ export interface TaskDocument extends Document {
   assignedTo: mongoose.Types.ObjectId | null;
   createdBy: mongoose.Types.ObjectId;
   dueDate: Date | null;
+  dependsOn: mongoose.Types.ObjectId[];
+  tags: string[];
+  recurrence: string;
   createdAt: Date;
   updatedAt: Date;
 }
@@ -73,11 +76,31 @@ const taskSchema = new Schema<TaskDocument>(
       type: Date,
       default: null,
     },
+    dependsOn: [
+      {
+        type: Schema.Types.ObjectId,
+        ref: "Task",
+      },
+    ],
+    tags: [
+      {
+        type: String,
+        trim: true,
+      },
+    ],
+    recurrence: {
+      type: String,
+      enum: ["NONE", "DAILY", "WEEKLY", "MONTHLY"],
+      default: "NONE",
+    },
   },
   {
     timestamps: true,
   }
 );
+
+taskSchema.index({ workspace: 1, status: 1 });
+taskSchema.index({ workspace: 1, assignedTo: 1 });
 
 const TaskModel = mongoose.model<TaskDocument>("Task", taskSchema);
 

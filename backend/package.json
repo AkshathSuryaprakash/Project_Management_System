@@ -7,7 +7,8 @@
     "seed": "ts-node src/seeders/role.seeder.ts",
     "dev": "ts-node --transpile-only src/index.ts",
     "build": "tsc && cp package.json ./dist",
-    "start": "node dist/index.js"
+    "start": "node dist/index.js",
+    "test": "jest --runInBand --detectOpenHandles"
   },
   "keywords": [],
   "author": "",
@@ -18,11 +19,14 @@
     "cors": "^2.8.5",
     "dotenv": "^16.4.7",
     "express": "^4.21.2",
+    "express-rate-limit": "^7.5.0",
     "mongoose": "^8.9.2",
     "passport": "^0.5.3",
     "passport-google-oauth20": "^2.0.0",
     "passport-local": "^1.0.0",
     "project-management-saas": "file:..",
+    "socket.io": "^4.8.1",
+    "swagger-ui-express": "^5.0.1",
     "uuid": "^11.0.3",
     "zod": "^3.24.1"
   },
@@ -32,12 +36,18 @@
     "@types/cors": "^2.8.17",
     "@types/dotenv": "^8.2.3",
     "@types/express": "^5.0.0",
+    "@types/jest": "^29.5.14",
     "@types/mongoose": "^5.11.97",
     "@types/node": "^22.10.2",
     "@types/passport": "^1.0.17",
     "@types/passport-google-oauth20": "^2.0.16",
     "@types/passport-local": "^1.0.38",
+    "@types/supertest": "^6.0.2",
+    "@types/swagger-ui-express": "^4.1.7",
+    "jest": "^29.7.0",
     "mongodb-memory-server": "^11.2.0",
+    "supertest": "^7.0.0",
+    "ts-jest": "^29.2.5",
     "ts-node-dev": "^2.0.0",
     "typescript": "^5.7.2"
   }

@@ -6,6 +6,11 @@ import {
   Users,
   CheckCircle,
   LayoutDashboard,
+  Columns3,
+  Calendar,
+  MessageSquare,
+  History,
+  BarChart3,
 } from "lucide-react";
 import {
   SidebarGroup,
@@ -46,6 +51,31 @@ export function NavMain() {
       title: "Tasks",
       url: `/workspace/${workspaceId}/tasks`,
       icon: CheckCircle,
+    },
+    {
+      title: "Kanban Board",
+      url: `/workspace/${workspaceId}/kanban`,
+      icon: Columns3,
+    },
+    {
+      title: "Calendar",
+      url: `/workspace/${workspaceId}/calendar`,
+      icon: Calendar,
+    },
+    {
+      title: "Messages",
+      url: `/workspace/${workspaceId}/messages`,
+      icon: MessageSquare,
+    },
+    {
+      title: "Activity Log",
+      url: `/workspace/${workspaceId}/activity`,
+      icon: History,
+    },
+    {
+      title: "Reports",
+      url: `/workspace/${workspaceId}/reports`,
+      icon: BarChart3,
     },
     {
       title: "Members",

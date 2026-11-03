@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { Row } from "@tanstack/react-table";
-import { MoreHorizontal, Pencil } from "lucide-react";
+import { MoreHorizontal, Pencil, Eye } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import {
@@ -18,6 +18,7 @@ import useWorkspaceId from "@/hooks/use-workspace-id";
 import { deleteTaskMutationFn } from "@/lib/api";
 import { toast } from "@/hooks/use-toast";
 import EditTaskDialog from "../edit-task-dialog"; // Import the Edit Dialog
+import { TaskDetailDialog } from "../task-detail-dialog";
 
 interface DataTableRowActionsProps {
   row: Row<TaskType>;
@@ -26,6 +27,7 @@ interface DataTableRowActionsProps {
 export function DataTableRowActions({ row }: DataTableRowActionsProps) {
   const [openDeleteDialog, setOpenDialog] = useState(false);
   const [openEditDialog, setOpenEditDialog] = useState(false); // State for edit dialog
+  const [openDetailDialog, setOpenDetailDialog] = useState(false);
 
   const queryClient = useQueryClient();
   const workspaceId = useWorkspaceId();
@@ -64,6 +66,12 @@ export function DataTableRowActions({ row }: DataTableRowActionsProps) {
           </Button>
         </DropdownMenuTrigger>
         <DropdownMenuContent align="end" className="w-[160px]">
+          {/* View Details Option */}
+          <DropdownMenuItem className="cursor-pointer" onClick={() => setOpenDetailDialog(true)}>
+            <Eye className="w-4 h-4 mr-2" /> View Details
+          </DropdownMenuItem>
+          <DropdownMenuSeparator />
+
           {/* Edit Task Option */}
           <DropdownMenuItem className="cursor-pointer" onClick={() => setOpenEditDialog(true)}>
             <Pencil className="w-4 h-4 mr-2" /> Edit Task
@@ -80,6 +88,13 @@ export function DataTableRowActions({ row }: DataTableRowActionsProps) {
           </DropdownMenuItem>
         </DropdownMenuContent>
       </DropdownMenu>
+
+      {/* Task Detail Dialog (Details, Comments, Attachments) */}
+      <TaskDetailDialog
+        task={task}
+        open={openDetailDialog}
+        onOpenChange={setOpenDetailDialog}
+      />
 
       {/* Edit Task Dialog */}
       <EditTaskDialog task={task} isOpen={openEditDialog} onClose={() => setOpenEditDialog(false)} />

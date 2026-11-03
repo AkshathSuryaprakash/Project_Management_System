@@ -27,14 +27,17 @@ export const RolePermissions: Record<RoleType, Array<PermissionType>> = {
     Permissions.VIEW_ONLY,
   ],
   ADMIN: [
+    Permissions.EDIT_WORKSPACE,
+    Permissions.MANAGE_WORKSPACE_SETTINGS,
     Permissions.ADD_MEMBER,
+    Permissions.CHANGE_MEMBER_ROLE,
+    Permissions.REMOVE_MEMBER,
     Permissions.CREATE_PROJECT,
     Permissions.EDIT_PROJECT,
     Permissions.DELETE_PROJECT,
     Permissions.CREATE_TASK,
     Permissions.EDIT_TASK,
     Permissions.DELETE_TASK,
-    Permissions.MANAGE_WORKSPACE_SETTINGS,
     Permissions.VIEW_ONLY,
   ],
   MEMBER: [
