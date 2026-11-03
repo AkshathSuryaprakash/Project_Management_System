@@ -1,5 +1,6 @@
-import React, { useState, useEffect, useRef } from "react";
+import React, { useState, useEffect, useRef, useMemo } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { useSearchParams } from "react-router-dom";
 import useWorkspaceId from "@/hooks/use-workspace-id";
 import { useAuthContext } from "@/context/auth-provider";
 import { useSocket } from "@/context/socket-context";
@@ -20,6 +21,8 @@ import {
   MessageSquare,
   FileIcon,
   Download,
+  X,
+  Loader,
 } from "lucide-react";
 import { getAvatarColor, getAvatarFallbackText } from "@/lib/helper";
 import { toast } from "@/hooks/use-toast";
@@ -27,16 +30,23 @@ import { toast } from "@/hooks/use-toast";
 export default function Messages() {
   const workspaceId = useWorkspaceId();
   const { user } = useAuthContext();
-  const { socket } = useSocket();
+  const { socket, isConnected } = useSocket();
   const queryClient = useQueryClient();
+  const [searchParams] = useSearchParams();
 
   const [activeType, setActiveType] = useState<"channel" | "dm">("channel");
   const [activeChannel, setActiveChannel] = useState("general");
   const [activeDmUser, setActiveDmUser] = useState<any | null>(null);
   const [searchMember, setSearchMember] = useState("");
   const [messageText, setMessageText] = useState("");
+  const [attachments, setAttachments] = useState<
+    Array<{ fileName: string; fileSize: number; fileType: string; fileData: string }>
+  >([]);
   const [typingUsers, setTypingUsers] = useState<string[]>([]);
+  const [unreadCounts, setUnreadCounts] = useState<Record<string, number>>({});
+
   const messagesEndRef = useRef<HTMLDivElement>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   // Channels
   const { data: channelsData } = useQuery({
@@ -55,20 +65,57 @@ export default function Messages() {
     { name: "design", conversationId: "channel:design" },
   ];
 
-  // Compute active conversationId
-  const conversationId =
-    activeType === "channel"
-      ? `channel:${activeChannel.toLowerCase()}`
-      : activeDmUser
-      ? `dm:${[user?._id, activeDmUser._id].sort().join("_")}`
-      : "";
+  // Auto-select DM user from URL search param `?dm=userId` if present
+  useEffect(() => {
+    const dmUserId = searchParams.get("dm");
+    if (dmUserId && members.length > 0) {
+      const targetMember = members.find(
+        (m: any) =>
+          m.userId?._id?.toString() === dmUserId ||
+          m.userId?.toString() === dmUserId
+      );
+      if (targetMember && targetMember.userId) {
+        setActiveType("dm");
+        setActiveDmUser(targetMember.userId);
+      }
+    }
+  }, [searchParams, members]);
+
+  // Compute normalized conversationId
+  const conversationId = useMemo(() => {
+    if (activeType === "channel") {
+      return `channel:${activeChannel.toLowerCase()}`;
+    }
+    if (activeType === "dm" && activeDmUser?._id && user?._id) {
+      const u1 = user._id.toString();
+      const u2 = activeDmUser._id.toString();
+      const sorted = [u1, u2].sort();
+      return `dm:${sorted[0]}_${sorted[1]}`;
+    }
+    return "";
+  }, [activeType, activeChannel, activeDmUser?._id, user?._id]);
+
+  // Join/leave conversation room over Socket.IO
+  useEffect(() => {
+    if (socket && conversationId && workspaceId && user?._id) {
+      socket.emit("join_conversation", {
+        workspaceId,
+        conversationId,
+        userId: user._id,
+      });
+
+      return () => {
+        socket.emit("leave_conversation", { conversationId });
+      };
+    }
+  }, [socket, conversationId, workspaceId, user?._id]);
 
   // Messages Query
   const { data: messagesData, isLoading: isLoadingMessages } = useQuery({
     queryKey: ["messages", workspaceId, conversationId],
     queryFn: () => getConversationMessagesQueryFn(workspaceId, conversationId),
     enabled: !!workspaceId && !!conversationId,
-    refetchInterval: false,
+    staleTime: 0,
   });
 
   const messages = messagesData?.messages || [];
@@ -76,37 +123,45 @@ export default function Messages() {
   // Send Message Mutation
   const { mutate: sendMessage, isPending: isSending } = useMutation({
     mutationFn: sendMessageMutationFn,
-    onSuccess: (data) => {
+    onSuccess: (resData) => {
       setMessageText("");
-      queryClient.setQueryData(
-        ["messages", workspaceId, conversationId],
-        (old: any) => {
-          const oldList = old?.messages || [];
-          return { ...old, messages: [...oldList, data.data] };
-        }
-      );
+      setAttachments([]);
+      const newMsg = resData.data || resData.message;
+      if (newMsg && newMsg._id) {
+        queryClient.setQueryData(
+          ["messages", workspaceId, conversationId],
+          (old: any) => {
+            const list = old?.messages || [];
+            if (list.some((m: any) => m._id === newMsg._id)) return old;
+            return { ...old, messages: [...list, newMsg] };
+          }
+        );
+      }
       queryClient.invalidateQueries({
         queryKey: ["messages", workspaceId, conversationId],
       });
     },
     onError: (err: any) => {
       toast({
-        title: "Send failed",
-        description: err.message || "Could not send message",
+        title: "Message send failed",
+        description: err.response?.data?.message || err.message || "Could not deliver message.",
         variant: "destructive",
       });
     },
   });
 
-  // Socket listener for live incoming messages
+  // Real-time Socket.IO listener for live incoming messages & typing
   useEffect(() => {
     if (!socket) return;
 
     const handleNewMessage = (msg: any) => {
-      if (
-        msg.workspaceId === workspaceId &&
-        msg.conversationId === conversationId
-      ) {
+      if (!msg) return;
+      const msgWsId = (msg.workspaceId?._id || msg.workspaceId)?.toString();
+      const curWsId = workspaceId?.toString();
+      if (msgWsId && curWsId && msgWsId !== curWsId) return;
+
+      // Check if message belongs to current active conversation
+      if (msg.conversationId === conversationId) {
         queryClient.setQueryData(
           ["messages", workspaceId, conversationId],
           (old: any) => {
@@ -115,13 +170,38 @@ export default function Messages() {
             return { ...old, messages: [...list, msg] };
           }
         );
+      } else {
+        // Also update cached messages for that conversation room so switching is instant
+        queryClient.setQueryData(
+          ["messages", workspaceId, msg.conversationId],
+          (old: any) => {
+            const list = old?.messages || [];
+            if (list.some((m: any) => m._id === msg._id)) return old;
+            return { ...old, messages: [...list, msg] };
+          }
+        );
+
+        // Update unread count for DM sender if message was sent to us
+        const senderId = (msg.senderId?._id || msg.senderId)?.toString();
+        const recipientId = (msg.recipientId?._id || msg.recipientId)?.toString();
+        if (
+          recipientId &&
+          user?._id &&
+          recipientId === user._id.toString() &&
+          senderId !== user._id.toString()
+        ) {
+          setUnreadCounts((prev) => ({
+            ...prev,
+            [senderId]: (prev[senderId] || 0) + 1,
+          }));
+        }
       }
     };
 
     const handleTypingStart = (data: any) => {
       if (
         data.conversationId === conversationId &&
-        data.userId !== user?._id
+        data.userId !== user?._id?.toString()
       ) {
         setTypingUsers((prev) =>
           prev.includes(data.userName) ? prev : [...prev, data.userName]
@@ -149,19 +229,28 @@ export default function Messages() {
   // Scroll to bottom on new messages
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
-  }, [messages]);
+  }, [messages, isSending]);
 
   const handleSend = (e: React.FormEvent) => {
     e.preventDefault();
-    if (!messageText.trim()) return;
+    if (!messageText.trim() && attachments.length === 0) return;
+    if (!conversationId) {
+      toast({
+        title: "No conversation selected",
+        description: "Please select a channel or member to send your message.",
+        variant: "destructive",
+      });
+      return;
+    }
 
     sendMessage({
       workspaceId,
       data: {
         conversationId,
-        content: messageText.trim(),
+        content: messageText.trim() || (attachments.length > 0 ? "Shared attachments" : ""),
         channel: activeType === "channel" ? activeChannel : undefined,
         recipientId: activeType === "dm" ? activeDmUser?._id : undefined,
+        attachments: attachments.length > 0 ? attachments : undefined,
       },
     });
 
@@ -177,7 +266,7 @@ export default function Messages() {
 
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     setMessageText(e.target.value);
-    if (socket) {
+    if (socket && conversationId) {
       if (e.target.value.length > 0) {
         socket.emit("typing:start", {
           workspaceId,
@@ -196,6 +285,45 @@ export default function Messages() {
     }
   };
 
+  // Attachment upload handler
+  const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    if (file.size > 25 * 1024 * 1024) {
+      toast({
+        title: "File too large",
+        description: "Maximum file size is 25MB.",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    const reader = new FileReader();
+    reader.onload = () => {
+      setAttachments((prev) => [
+        ...prev,
+        {
+          fileName: file.name,
+          fileSize: file.size,
+          fileType: file.type || "application/octet-stream",
+          fileData: reader.result as string,
+        },
+      ]);
+      toast({
+        title: "Attachment added",
+        description: `${file.name} ready to send.`,
+        variant: "success",
+      });
+    };
+    reader.readAsDataURL(file);
+    e.target.value = "";
+  };
+
+  const removeAttachment = (idx: number) => {
+    setAttachments((prev) => prev.filter((_, i) => i !== idx));
+  };
+
   // Filter members for DM list
   const filteredMembers = members.filter((m: any) => {
     const name = m.userId?.name || "";
@@ -207,7 +335,7 @@ export default function Messages() {
   const activeTitle =
     activeType === "channel"
       ? `#${activeChannel}`
-      : `${activeDmUser?.name || "Member"} – Direct Message`;
+      : `${activeDmUser?.name || "Direct Message"}`;
 
   const placeholderText =
     activeType === "channel"
@@ -216,12 +344,28 @@ export default function Messages() {
 
   return (
     <div className="w-full flex h-[calc(100vh-5rem)] rounded-xl border bg-card text-card-foreground shadow-sm overflow-hidden">
+      {/* Hidden file input */}
+      <input
+        type="file"
+        ref={fileInputRef}
+        onChange={handleFileSelect}
+        className="hidden"
+      />
+
       {/* LEFT SIDEBAR matching Figure 9.10 */}
       <div className="w-64 md:w-72 border-r bg-muted/20 flex flex-col shrink-0">
         <div className="p-3.5 border-b space-y-3">
-          <h2 className="font-bold text-base tracking-tight flex items-center gap-2">
-            <MessageSquare className="w-4 h-4 text-primary" /> Messages
-          </h2>
+          <div className="flex items-center justify-between">
+            <h2 className="font-bold text-base tracking-tight flex items-center gap-2">
+              <MessageSquare className="w-4 h-4 text-primary" /> Messages
+            </h2>
+            <span
+              className={`h-2 w-2 rounded-full ${
+                isConnected ? "bg-emerald-500" : "bg-red-500"
+              }`}
+              title={isConnected ? "Socket connected" : "Socket disconnected"}
+            />
+          </div>
           <div className="relative">
             <Search className="w-3.5 h-3.5 absolute left-2.5 top-2.5 text-muted-foreground" />
             <Input
@@ -273,18 +417,22 @@ export default function Messages() {
               {filteredMembers.map((m: any) => {
                 const u = m.userId;
                 if (!u) return null;
+                const uId = (u._id || u).toString();
+                const currentId = user?._id?.toString();
                 const isSelected =
-                  activeType === "dm" && activeDmUser?._id === u._id;
-                const isSelf = u._id === user?._id;
-                const initials = getAvatarFallbackText(u.name);
-                const color = getAvatarColor(u.name);
+                  activeType === "dm" && activeDmUser?._id?.toString() === uId;
+                const isSelf = uId === currentId;
+                const initials = getAvatarFallbackText(u.name || "U");
+                const color = getAvatarColor(u.name || "U");
+                const unread = unreadCounts[uId] || 0;
 
                 return (
                   <button
-                    key={u._id}
+                    key={uId}
                     onClick={() => {
                       setActiveType("dm");
                       setActiveDmUser(u);
+                      setUnreadCounts((prev) => ({ ...prev, [uId]: 0 }));
                     }}
                     className={`w-full flex items-center justify-between px-2.5 py-1.5 rounded-md text-xs font-medium transition-colors ${
                       isSelected
@@ -303,6 +451,12 @@ export default function Messages() {
                         {u.name} {isSelf && "(You)"}
                       </span>
                     </div>
+
+                    {unread > 0 && !isSelected && (
+                      <span className="ml-2 bg-primary text-primary-foreground text-[10px] font-bold rounded-full h-4 w-4 flex items-center justify-center shrink-0">
+                        {unread}
+                      </span>
+                    )}
                   </button>
                 );
               })}
@@ -312,21 +466,26 @@ export default function Messages() {
       </div>
 
       {/* RIGHT CHAT AREA matching Figure 9.10 */}
-      <div className="flex-1 flex flex-col h-full bg-background">
+      <div className="flex-1 flex flex-col h-full bg-background min-w-0">
         {/* Conversation Header */}
         <div className="h-12 border-b flex items-center px-4 justify-between shrink-0 bg-muted/10">
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-2 truncate">
             {activeType === "channel" ? (
-              <Hash className="w-4 h-4 text-muted-foreground" />
+              <Hash className="w-4 h-4 text-muted-foreground shrink-0" />
             ) : (
-              <Avatar className="h-6 w-6">
+              <Avatar className="h-6 w-6 shrink-0">
                 <AvatarImage src={activeDmUser?.profilePicture || ""} />
                 <AvatarFallback className="text-[10px]">
                   {getAvatarFallbackText(activeDmUser?.name || "U")}
                 </AvatarFallback>
               </Avatar>
             )}
-            <span className="font-semibold text-sm">{activeTitle}</span>
+            <span className="font-semibold text-sm truncate">{activeTitle}</span>
+            {activeType === "dm" && (
+              <span className="text-[11px] text-muted-foreground font-normal">
+                ({activeDmUser?.email})
+              </span>
+            )}
           </div>
         </div>
 
@@ -334,6 +493,7 @@ export default function Messages() {
         <div className="flex-1 overflow-y-auto p-4 space-y-4">
           {isLoadingMessages ? (
             <div className="flex items-center justify-center h-full">
+              <Loader className="w-5 h-5 animate-spin text-muted-foreground mr-2" />
               <span className="text-xs text-muted-foreground">
                 Loading messages...
               </span>
@@ -350,15 +510,17 @@ export default function Messages() {
             </div>
           ) : (
             messages.map((msg: any) => {
-              const isMe = msg.senderId?._id === user?._id;
-              const senderName = msg.senderId?.name || "User";
+              const senderIdStr = (msg.senderId?._id || msg.senderId)?.toString();
+              const isMe = senderIdStr === user?._id?.toString();
+              const senderName =
+                msg.senderId?.name || (isMe ? user?.name : "Colleague") || "User";
               const initials = getAvatarFallbackText(senderName);
               const color = getAvatarColor(senderName);
 
               return (
                 <div
                   key={msg._id}
-                  className={`flex items-start gap-2.5 max-w-[80%] ${
+                  className={`flex items-start gap-2.5 max-w-[85%] ${
                     isMe ? "ml-auto flex-row-reverse" : ""
                   }`}
                 >
@@ -424,8 +586,29 @@ export default function Messages() {
         {/* Typing indicators */}
         {typingUsers.length > 0 && (
           <div className="px-4 py-1 text-[11px] text-muted-foreground italic">
-            {typingUsers.join(", ")} {typingUsers.length > 1 ? "are" : "is"}{" "}
-            typing...
+            {typingUsers.join(", ")} {typingUsers.length > 1 ? "are" : "is"} typing...
+          </div>
+        )}
+
+        {/* Selected Attachments Preview */}
+        {attachments.length > 0 && (
+          <div className="px-3 py-1.5 bg-muted/40 border-t flex flex-wrap gap-2">
+            {attachments.map((att, idx) => (
+              <div
+                key={idx}
+                className="flex items-center gap-1.5 bg-background border rounded px-2 py-1 text-xs"
+              >
+                <FileIcon className="w-3 h-3 text-muted-foreground" />
+                <span className="truncate max-w-[150px]">{att.fileName}</span>
+                <button
+                  type="button"
+                  onClick={() => removeAttachment(idx)}
+                  className="hover:text-destructive ml-1"
+                >
+                  <X className="w-3 h-3" />
+                </button>
+              </div>
+            ))}
           </div>
         )}
 
@@ -438,8 +621,9 @@ export default function Messages() {
             type="button"
             variant="ghost"
             size="icon"
+            onClick={() => fileInputRef.current?.click()}
             className="h-9 w-9 text-muted-foreground hover:text-foreground shrink-0"
-            title="Attach file"
+            title="Attach file (up to 25MB)"
           >
             <Paperclip className="w-4 h-4" />
           </Button>
@@ -454,7 +638,7 @@ export default function Messages() {
           <Button
             type="submit"
             size="icon"
-            disabled={isSending || !messageText.trim()}
+            disabled={isSending || (!messageText.trim() && attachments.length === 0)}
             className="h-9 w-9 shrink-0"
           >
             <Send className="w-4 h-4" />
@@ -464,4 +648,3 @@ export default function Messages() {
     </div>
   );
 }
-

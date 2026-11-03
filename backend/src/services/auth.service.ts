@@ -184,5 +184,13 @@ export const verifyUserService = async ({
     throw new UnauthorizedException("Invalid email or password");
   }
 
+  if (!user.currentWorkspace) {
+    const membership = await MemberModel.findOne({ userId: user._id });
+    if (membership) {
+      user.currentWorkspace = membership.workspaceId;
+      await user.save();
+    }
+  }
+
   return user.omitPassword();
 };

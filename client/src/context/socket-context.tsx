@@ -75,6 +75,14 @@ export const SocketProvider: React.FC<{ children: React.ReactNode }> = ({
       queryClient.invalidateQueries({ queryKey: ["notifications", workspaceId] });
     });
 
+    // Real-time messages channel invalidation
+    s.on("message:received", (msg: any) => {
+      const msgWsId = (msg?.workspaceId?._id || msg?.workspaceId)?.toString();
+      if (msgWsId === workspaceId?.toString()) {
+        queryClient.invalidateQueries({ queryKey: ["channels", workspaceId] });
+      }
+    });
+
     // Real-time comments
     s.on("comment:created", () => {
       queryClient.invalidateQueries({ queryKey: ["comments"] });

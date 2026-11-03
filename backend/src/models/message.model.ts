@@ -76,10 +76,14 @@ const messageSchema = new Schema<MessageDocument>(
   },
   {
     timestamps: true,
+    toJSON: { virtuals: true },
+    toObject: { virtuals: true },
   }
 );
 
 messageSchema.index({ workspaceId: 1, conversationId: 1, createdAt: 1 });
+messageSchema.index({ workspaceId: 1, recipientId: 1, createdAt: 1 });
+messageSchema.index({ workspaceId: 1, senderId: 1, createdAt: 1 });
 
 const MessageModel = mongoose.model<MessageDocument>("Message", messageSchema);
 

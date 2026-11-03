@@ -141,7 +141,9 @@ const AllMembers = () => {
                   variant="ghost"
                   size="sm"
                   className="h-8 text-xs gap-1"
-                  onClick={() => navigate(`/workspace/${workspaceId}/messages`)}
+                  onClick={() =>
+                    navigate(`/workspace/${workspaceId}/messages?dm=${u._id}`)
+                  }
                 >
                   <MessageSquare className="w-3.5 h-3.5" />
                   <span className="hidden sm:inline">Message</span>

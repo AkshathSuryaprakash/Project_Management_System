@@ -17,6 +17,7 @@ let mongoServer: MongoMemoryReplSet | null = null;
 
 const dummyMembers = [
   { name: "Akshath S", email: "akshathdeepa1978@gmail.com", role: Roles.OWNER },
+  { name: "Rahul", email: "rahul@example.com", role: Roles.MEMBER },
   { name: "Akshath S", email: "akshath1025@gmail.com", role: Roles.MEMBER },
   { name: "Ashok Kumar", email: "ashok@example.com", role: Roles.MEMBER },
   { name: "Ashish Patel", email: "ashish@example.com", role: Roles.MEMBER },
@@ -100,10 +101,14 @@ export const seedDemonstrationData = async () => {
       console.log("Seeded demonstration workspace: Akshath Workspace");
     }
 
-    // Set primary owner's current workspace
-    if (!primaryOwner.currentWorkspace) {
-      primaryOwner.currentWorkspace = workspace._id;
-      await primaryOwner.save();
+    // Set current workspace for all seeded users so login redirects correctly
+    for (const m of dummyMembers) {
+      const u = userMap.get(m.email);
+      const wsIdStr = (workspace._id as any)?.toString();
+      if (u && (!u.currentWorkspace || u.currentWorkspace.toString() !== wsIdStr)) {
+        u.currentWorkspace = workspace._id as any;
+        await u.save();
+      }
     }
 
     // 3. Ensure memberships exist

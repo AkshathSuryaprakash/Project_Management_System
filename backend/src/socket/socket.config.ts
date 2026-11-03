@@ -66,21 +66,71 @@ export const initSocket = (server: HTTPServer): SocketIOServer => {
       }
     });
 
-    // 3. Typing indicators
+    // 3. Authorize and join conversation room (Channel or DM)
+    socket.on(
+      "join_conversation",
+      async (data: { workspaceId: string; conversationId: string; userId?: string }) => {
+        try {
+          const targetUserId =
+            data.userId ||
+            userId ||
+            (socket.handshake.auth?.userId as string);
+          const { workspaceId, conversationId } = data;
+          if (!workspaceId || !conversationId) return;
+
+          if (targetUserId) {
+            const membership = await MemberModel.findOne({
+              userId: targetUserId,
+              workspaceId: workspaceId,
+            });
+
+            if (!membership) {
+              socket.emit("error", {
+                message: "Unauthorized: You are not a member of this workspace.",
+              });
+              return;
+            }
+
+            // For Direct Messages, verify caller is one of the two participants
+            if (conversationId.startsWith("dm:")) {
+              const participants = conversationId.replace("dm:", "").split("_");
+              if (!participants.includes(targetUserId.toString())) {
+                socket.emit("error", {
+                  message: "Unauthorized: You are not a participant in this conversation.",
+                });
+                return;
+              }
+            }
+          }
+
+          socket.join(`conversation:${conversationId}`);
+        } catch (err) {
+          console.error("Socket join_conversation error:", err);
+        }
+      }
+    );
+
+    socket.on("leave_conversation", (data: { conversationId: string }) => {
+      if (data?.conversationId) {
+        socket.leave(`conversation:${data.conversationId}`);
+      }
+    });
+
+    // 4. Typing indicators (targeted to specific conversation room)
     socket.on(
       "typing:start",
       (data: { workspaceId: string; conversationId: string; userName: string; userId: string }) => {
-        if (data?.workspaceId) {
-          socket.to(`workspace:${data.workspaceId}`).emit("typing:start", data);
+        if (data?.conversationId) {
+          socket.to(`conversation:${data.conversationId}`).emit("typing:start", data);
         }
       }
     );
 
     socket.on(
       "typing:stop",
-      (data: { workspaceId: string; conversationId: string; userId: string }) => {
-        if (data?.workspaceId) {
-          socket.to(`workspace:${data.workspaceId}`).emit("typing:stop", data);
+      (data: { workspaceId: string; conversationId: string; userId: string; userName?: string }) => {
+        if (data?.conversationId) {
+          socket.to(`conversation:${data.conversationId}`).emit("typing:stop", data);
         }
       }
     );
@@ -104,6 +154,16 @@ export const emitWorkspaceEvent = (
 ) => {
   if (io) {
     io.to(`workspace:${workspaceId}`).emit(event, payload);
+  }
+};
+
+export const emitToConversation = (
+  conversationId: string,
+  event: string,
+  payload: any
+) => {
+  if (io) {
+    io.to(`conversation:${conversationId}`).emit(event, payload);
   }
 };
 
