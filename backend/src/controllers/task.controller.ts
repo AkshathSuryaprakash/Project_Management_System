@@ -12,10 +12,13 @@ import { ForbiddenException, NotFoundException } from "../utils/appError";
 import { getMemberRoleInWorkspace } from "../services/member.service";
 import { roleGuard } from "../utils/roleGuard";
 import {
+  addTaskDependencyService,
   createTaskService,
   deleteTaskService,
   getAllTasksService,
   getTaskByIdService,
+  getTaskDependenciesService,
+  removeTaskDependencyService,
   updateTaskService,
 } from "../services/task.service";
 import { HTTPSTATUS } from "../config/http.config";
@@ -216,3 +219,93 @@ export const deleteTaskController = asyncHandler(
     });
   }
 );
+
+export const addTaskDependencyController = asyncHandler(
+  async (req: Request, res: Response) => {
+    const userId = req.user?._id;
+    const taskId = req.params.taskId || req.params.id;
+    const workspaceId =
+      req.body.workspaceId ||
+      req.params.workspaceId ||
+      (req.query.workspaceId as string);
+    const dependencyTaskId =
+      req.body.dependencyTaskId || req.body.taskId || req.body.dependsOnId;
+
+    if (!workspaceId) {
+      throw new ForbiddenException("Workspace ID is required.");
+    }
+    if (!dependencyTaskId) {
+      throw new ForbiddenException("Dependency Task ID is required.");
+    }
+
+    const { role } = await getMemberRoleInWorkspace(userId, workspaceId);
+    roleGuard(role, [Permissions.EDIT_TASK]);
+
+    const result = await addTaskDependencyService(
+      workspaceId,
+      taskId,
+      dependencyTaskId,
+      userId.toString()
+    );
+
+    return res.status(HTTPSTATUS.CREATED).json({
+      message: "Dependency added successfully",
+      ...result,
+    });
+  }
+);
+
+export const getTaskDependenciesController = asyncHandler(
+  async (req: Request, res: Response) => {
+    const userId = req.user?._id;
+    const taskId = req.params.taskId || req.params.id;
+    const workspaceId =
+      (req.query.workspaceId as string) || req.params.workspaceId;
+
+    if (!workspaceId) {
+      throw new ForbiddenException("Workspace ID is required.");
+    }
+
+    const { role } = await getMemberRoleInWorkspace(userId, workspaceId);
+    roleGuard(role, [Permissions.VIEW_ONLY]);
+
+    const result = await getTaskDependenciesService(workspaceId, taskId);
+
+    return res.status(HTTPSTATUS.OK).json({
+      message: "Task dependencies fetched successfully",
+      ...result,
+    });
+  }
+);
+
+export const removeTaskDependencyController = asyncHandler(
+  async (req: Request, res: Response) => {
+    const userId = req.user?._id;
+    const taskId = req.params.taskId || req.params.id;
+    const dependencyId = req.params.dependencyId;
+    const workspaceId =
+      (req.query.workspaceId as string) ||
+      req.params.workspaceId ||
+      req.body.workspaceId;
+
+    if (!workspaceId) {
+      throw new ForbiddenException("Workspace ID is required.");
+    }
+
+    const { role } = await getMemberRoleInWorkspace(userId, workspaceId);
+    roleGuard(role, [Permissions.EDIT_TASK]);
+
+    const result = await removeTaskDependencyService(
+      workspaceId,
+      taskId,
+      dependencyId,
+      userId.toString()
+    );
+
+    return res.status(HTTPSTATUS.OK).json({
+      message: "Dependency removed successfully",
+      ...result,
+    });
+  }
+);
+

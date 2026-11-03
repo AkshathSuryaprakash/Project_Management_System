@@ -30,6 +30,7 @@ import notificationRoutes from "./routes/notification.route";
 import activityRoutes from "./routes/activity.route";
 import reportRoutes from "./routes/report.route";
 import searchRoutes from "./routes/search.route";
+import timeTrackingRoutes from "./routes/time-tracking.route";
 
 const app = express();
 const server = http.createServer(app);
@@ -132,6 +133,7 @@ app.use(
 app.use(`${BASE_PATH}/member`, isAuthenticated, memberRoutes);
 app.use(`${BASE_PATH}/project`, isAuthenticated, projectRoutes);
 app.use(`${BASE_PATH}/task`, isAuthenticated, taskRoutes);
+app.use(`${BASE_PATH}/time-tracking`, isAuthenticated, timeTrackingRoutes);
 
 // Central error handler
 app.use(errorHandler);

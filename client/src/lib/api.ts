@@ -472,3 +472,104 @@ export const searchWorkspaceQueryFn = async (
   );
   return response.data;
 };
+
+// ==========================================
+// FEATURE 1: TASK TIME TRACKING APIs
+// ==========================================
+
+export const startTimeTrackingMutationFn = async ({
+  workspaceId,
+  taskId,
+  description,
+}: {
+  workspaceId: string;
+  taskId: string;
+  description?: string;
+}) => {
+  const response = await API.post("/time-tracking/start", {
+    workspaceId,
+    taskId,
+    description,
+  });
+  return response.data;
+};
+
+export const stopTimeTrackingMutationFn = async ({
+  workspaceId,
+  taskId,
+  timeEntryId,
+}: {
+  workspaceId: string;
+  taskId?: string;
+  timeEntryId?: string;
+}) => {
+  const response = await API.post("/time-tracking/stop", {
+    workspaceId,
+    taskId,
+    timeEntryId,
+  });
+  return response.data;
+};
+
+export const getTaskTimeTrackingQueryFn = async (
+  workspaceId: string,
+  taskId: string
+) => {
+  const response = await API.get(
+    `/time-tracking/task/${taskId}?workspaceId=${workspaceId}`
+  );
+  return response.data;
+};
+
+export const getActiveTimerQueryFn = async (workspaceId: string) => {
+  const response = await API.get(
+    `/time-tracking/active?workspaceId=${workspaceId}`
+  );
+  return response.data;
+};
+
+// ==========================================
+// FEATURE 2: TASK DEPENDENCIES APIs
+// ==========================================
+
+export const getTaskDependenciesQueryFn = async (
+  workspaceId: string,
+  taskId: string
+) => {
+  const response = await API.get(
+    `/task/${taskId}/dependencies?workspaceId=${workspaceId}`
+  );
+  return response.data;
+};
+
+export const addTaskDependencyMutationFn = async ({
+  workspaceId,
+  taskId,
+  dependencyTaskId,
+}: {
+  workspaceId: string;
+  taskId: string;
+  dependencyTaskId: string;
+}) => {
+  const response = await API.post(`/task/${taskId}/dependencies`, {
+    workspaceId,
+    dependencyTaskId,
+  });
+  return response.data;
+};
+
+export const removeTaskDependencyMutationFn = async ({
+  workspaceId,
+  taskId,
+  dependencyId,
+}: {
+  workspaceId: string;
+  taskId: string;
+  dependencyId: string;
+}) => {
+  const response = await API.delete(
+    `/task/${taskId}/dependencies/${dependencyId}?workspaceId=${workspaceId}`
+  );
+  return response.data;
+};
+

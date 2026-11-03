@@ -1,9 +1,12 @@
 import { Router } from "express";
 import {
+  addTaskDependencyController,
   createTaskController,
   deleteTaskController,
   getAllTasksController,
   getTaskByIdController,
+  getTaskDependenciesController,
+  removeTaskDependencyController,
   updateTaskController,
 } from "../controllers/task.controller";
 
@@ -27,5 +30,14 @@ taskRoutes.get(
   "/:id/project/:projectId/workspace/:workspaceId",
   getTaskByIdController
 );
+
+// Task Dependencies endpoints (suggested & standard REST conventions)
+taskRoutes.post("/:taskId/dependencies", addTaskDependencyController);
+taskRoutes.get("/:taskId/dependencies", getTaskDependenciesController);
+taskRoutes.delete("/:taskId/dependencies/:dependencyId", removeTaskDependencyController);
+
+taskRoutes.post("/:taskId/workspace/:workspaceId/dependencies", addTaskDependencyController);
+taskRoutes.get("/:taskId/workspace/:workspaceId/dependencies", getTaskDependenciesController);
+taskRoutes.delete("/:taskId/workspace/:workspaceId/dependencies/:dependencyId", removeTaskDependencyController);
 
 export default taskRoutes;

@@ -1,3 +1,6 @@
+
+
+
 import { TaskPriorityEnum, TaskStatusEnum } from "../enums/task.enum";
 import MemberModel from "../models/member.model";
 import ProjectModel from "../models/project.model";
@@ -345,3 +348,235 @@ export const deleteTaskService = async (
 
   return;
 };
+
+// ==========================================
+// TASK DEPENDENCY MANAGEMENT
+// ==========================================
+
+export const checkCircularDependency = async (
+  targetTaskId: string,
+  sourceTaskId: string
+): Promise<boolean> => {
+  const visited = new Set<string>();
+
+  const dfs = async (currentId: string): Promise<boolean> => {
+    if (currentId.toString() === sourceTaskId.toString()) {
+      return true; // Cycle detected: sourceTaskId is reachable from targetTaskId
+    }
+    if (visited.has(currentId.toString())) {
+      return false;
+    }
+    visited.add(currentId.toString());
+
+    const currentTask = await TaskModel.findById(currentId).select("dependsOn");
+    if (!currentTask || !currentTask.dependsOn || currentTask.dependsOn.length === 0) {
+      return false;
+    }
+
+    for (const depId of currentTask.dependsOn) {
+      if (await dfs(depId.toString())) {
+        return true;
+      }
+    }
+    return false;
+  };
+
+  return dfs(targetTaskId);
+};
+
+export const addTaskDependencyService = async (
+  workspaceId: string,
+  taskId: string,
+  dependencyTaskId: string,
+  userId: string
+) => {
+  if (taskId.toString() === dependencyTaskId.toString()) {
+    throw new BadRequestException("A task cannot depend on itself.");
+  }
+
+  const [task, depTask] = await Promise.all([
+    TaskModel.findOne({ _id: taskId, workspace: workspaceId }),
+    TaskModel.findOne({ _id: dependencyTaskId, workspace: workspaceId }),
+  ]);
+
+  if (!task) {
+    throw new NotFoundException("Task not found in this workspace.");
+  }
+  if (!depTask) {
+    throw new NotFoundException("Dependency task not found in this workspace.");
+  }
+
+  // Cross-project check
+  if (task.project.toString() !== depTask.project.toString()) {
+    throw new BadRequestException(
+      "Dependencies can only be established between tasks within the same project."
+    );
+  }
+
+  // Duplicate check
+  const exists = task.dependsOn.some(
+    (d) => d.toString() === dependencyTaskId.toString()
+  );
+  if (exists) {
+    throw new BadRequestException("This dependency already exists.");
+  }
+
+  // Circular dependency check
+  const isCircular = await checkCircularDependency(dependencyTaskId, taskId);
+  if (isCircular) {
+    throw new BadRequestException(
+      "Circular dependency detected. This dependency would create an impossible circular loop."
+    );
+  }
+
+  task.dependsOn.push(depTask._id as any);
+  await task.save();
+
+  await task.populate({
+    path: "dependsOn",
+    select: "_id title taskCode status dueDate assignedTo priority",
+    populate: { path: "assignedTo", select: "_id name email profilePicture" },
+  });
+
+  // Audit trail
+  await logActivity({
+    userId,
+    workspaceId,
+    projectId: task.project.toString(),
+    taskId,
+    action: "ADD_DEPENDENCY",
+    details: `Added dependency: "${task.title}" now depends on "${depTask.title}"`,
+  });
+
+  // Real-time broadcast
+  emitWorkspaceEvent(workspaceId, "task:updated", task);
+
+  return { task, dependencies: task.dependsOn };
+};
+
+export const getTaskDependenciesService = async (
+  workspaceId: string,
+  taskId: string
+) => {
+  const task = await TaskModel.findOne({ _id: taskId, workspace: workspaceId })
+    .populate({
+      path: "dependsOn",
+      select: "_id title taskCode status dueDate assignedTo priority",
+      populate: { path: "assignedTo", select: "_id name email profilePicture" },
+    });
+
+  if (!task) {
+    throw new NotFoundException("Task not found in this workspace.");
+  }
+
+  // Find reverse dependents (tasks that depend on this task)
+  const dependents = await TaskModel.find({
+    workspace: workspaceId,
+    project: task.project,
+    dependsOn: taskId,
+  })
+    .select("_id title taskCode status dueDate assignedTo priority")
+    .populate("assignedTo", "_id name email profilePicture");
+
+  // Find candidate tasks in the same project that could be added as dependencies
+  const rawAvailable = await TaskModel.find({
+    workspace: workspaceId,
+    project: task.project,
+    _id: { $ne: taskId, $nin: task.dependsOn },
+  })
+    .select("_id title taskCode status dueDate priority assignedTo")
+    .populate("assignedTo", "_id name email profilePicture");
+
+  // Filter out any candidates that would cause a cycle
+  const availableTasks = [];
+  for (const candidate of rawAvailable) {
+    const createsCycle = await checkCircularDependency(
+      (candidate._id as any).toString(),
+      taskId
+    );
+    if (!createsCycle) {
+      availableTasks.push(candidate);
+    }
+  }
+
+  // Compute status summary
+  const now = new Date();
+  const deps = (task.dependsOn as any[]) || [];
+  const incompleteDeps = deps.filter((d) => d.status !== TaskStatusEnum.DONE);
+  const overdueDeps = deps.filter(
+    (d) => d.dueDate && new Date(d.dueDate) < now && d.status !== TaskStatusEnum.DONE
+  );
+
+  const isBlocked = incompleteDeps.length > 0;
+  const isReady = deps.length === 0 || incompleteDeps.length === 0;
+  const hasOverdueDependency = overdueDeps.length > 0;
+
+  let message = "All prerequisite tasks completed. Ready to proceed.";
+  if (hasOverdueDependency) {
+    message = "Warning: One or more prerequisite tasks are overdue!";
+  } else if (isBlocked) {
+    message = `This task is waiting for ${incompleteDeps.length} prerequisite task(s) to be completed.`;
+  }
+
+  const statusSummary = {
+    isBlocked,
+    isReady,
+    hasOverdueDependency,
+    message,
+    totalDependencies: deps.length,
+    incompleteCount: incompleteDeps.length,
+  };
+
+  return {
+    dependencies: deps,
+    dependents,
+    availableTasks,
+    statusSummary,
+  };
+};
+
+export const removeTaskDependencyService = async (
+  workspaceId: string,
+  taskId: string,
+  dependencyId: string,
+  userId: string
+) => {
+  const task = await TaskModel.findOne({
+    _id: taskId,
+    workspace: workspaceId,
+  });
+
+  if (!task) {
+    throw new NotFoundException("Task not found in this workspace.");
+  }
+
+  const depTask = await TaskModel.findById(dependencyId).select("title");
+
+  task.dependsOn = (task.dependsOn as any[]).filter(
+    (d) => d.toString() !== dependencyId.toString()
+  );
+
+  await task.save();
+
+  await task.populate({
+    path: "dependsOn",
+    select: "_id title taskCode status dueDate assignedTo priority",
+    populate: { path: "assignedTo", select: "_id name email profilePicture" },
+  });
+
+  // Audit trail
+  await logActivity({
+    userId,
+    workspaceId,
+    projectId: task.project.toString(),
+    taskId,
+    action: "REMOVE_DEPENDENCY",
+    details: `Removed dependency on "${depTask?.title || dependencyId}"`,
+  });
+
+  // Real-time broadcast
+  emitWorkspaceEvent(workspaceId, "task:updated", task);
+
+  return { task, dependencies: task.dependsOn };
+};
+

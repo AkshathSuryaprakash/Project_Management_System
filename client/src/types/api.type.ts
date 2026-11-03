@@ -283,3 +283,73 @@ export type AllTaskResponseType = {
   tasks: TaskType[];
   pagination: PaginationType;
 };
+
+// TIME TRACKING TYPES
+export type TimeEntryType = {
+  _id: string;
+  workspaceId: string;
+  projectId: string;
+  taskId: {
+    _id: string;
+    title: string;
+    taskCode: string;
+    status: TaskStatusEnumType;
+  };
+  userId: {
+    _id: string;
+    name: string;
+    email: string;
+    profilePicture: string | null;
+  };
+  startTime: string;
+  endTime: string | null;
+  duration: number; // in seconds
+  status: "RUNNING" | "COMPLETED";
+  description?: string | null;
+  createdAt: string;
+  updatedAt: string;
+};
+
+export type TaskTimeEntriesResponseType = {
+  message: string;
+  entries: TimeEntryType[];
+  activeTimer: TimeEntryType | null;
+  totalDuration: number;
+  formattedTotalDuration: string;
+};
+
+export type ActiveTimerResponseType = {
+  message: string;
+  activeTimer: TimeEntryType | null;
+};
+
+// TASK DEPENDENCIES TYPES
+export type TaskDependencyItemType = {
+  _id: string;
+  title: string;
+  taskCode: string;
+  status: TaskStatusEnumType;
+  priority: TaskPriorityEnumType;
+  dueDate?: string | null;
+  assignedTo?: {
+    _id: string;
+    name: string;
+    email?: string;
+    profilePicture: string | null;
+  } | null;
+};
+
+export type TaskDependenciesResponseType = {
+  message: string;
+  dependencies: TaskDependencyItemType[];
+  dependents: TaskDependencyItemType[];
+  availableTasks: TaskDependencyItemType[];
+  statusSummary: {
+    isBlocked: boolean;
+    isReady: boolean;
+    hasOverdueDependency: boolean;
+    message: string;
+    totalDependencies: number;
+    incompleteCount: number;
+  };
+};
