@@ -1,4 +1,6 @@
 import mongoose from "mongoose";
+import fs from "fs";
+import path from "path";
 import { MongoMemoryReplSet } from "mongodb-memory-server";
 import { config } from "./app.config";
 import RoleModel from "../models/roles-permission.model";
@@ -308,12 +310,17 @@ export const seedDemonstrationData = async () => {
 };
 
 const connectDatabase = async () => {
+  const uriFile = path.join(__dirname, "../../.active-db-uri");
+
   try {
     console.log("Attempting to connect to configured MONGO_URI...");
     await mongoose.connect(config.MONGO_URI, {
       serverSelectionTimeoutMS: 5000,
     });
     console.log("Connected to MongoDB successfully (persistent)");
+    try {
+      fs.writeFileSync(uriFile, config.MONGO_URI, "utf8");
+    } catch {}
     await seedDemonstrationData();
   } catch (error) {
     console.warn("Could not connect to configured MONGO_URI:", (error as Error).message || error);
@@ -333,6 +340,9 @@ const connectDatabase = async () => {
         mongoUri += (mongoUri.includes("?") ? "&" : "?") + "retryWrites=false";
       }
       console.log(`In-memory MongoDB Replica Set active at ${mongoUri}`);
+      try {
+        fs.writeFileSync(uriFile, mongoUri, "utf8");
+      } catch {}
       await mongoose.connect(mongoUri);
       console.log("Connected to in-memory fallback database");
       await seedDemonstrationData();

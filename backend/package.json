@@ -6,6 +6,7 @@
   "scripts": {
     "seed": "ts-node src/seeders/role.seeder.ts",
     "dev": "ts-node --transpile-only src/index.ts",
+    "db:view": "ts-node src/scripts/view-database.ts",
     "build": "tsc && cp package.json ./dist",
     "start": "node dist/index.js",
     "test": "jest --runInBand --detectOpenHandles"
