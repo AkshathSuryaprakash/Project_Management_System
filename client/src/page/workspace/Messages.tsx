@@ -7,6 +7,8 @@ import { useSocket } from "@/context/socket-context";
 import {
   getChannelsQueryFn,
   getConversationMessagesQueryFn,
+  getRecentConversationsQueryFn,
+  markMessagesAsReadMutationFn,
   sendMessageMutationFn,
 } from "@/lib/api";
 import useGetWorkspaceMembers from "@/hooks/api/use-get-workspace-members";
@@ -24,6 +26,8 @@ import {
   X,
   Loader,
   UserCheck,
+  FileText,
+  Clock,
 } from "lucide-react";
 import { getAvatarColor, getAvatarFallbackText } from "@/lib/helper";
 import { toast } from "@/hooks/use-toast";
@@ -61,6 +65,27 @@ export default function Messages() {
     queryKey: ["channels", workspaceId],
     queryFn: () => getChannelsQueryFn(workspaceId),
     enabled: !!workspaceId,
+  });
+
+  // Recent DM Conversations
+  const { data: recentData } = useQuery({
+    queryKey: ["recent-conversations", workspaceId],
+    queryFn: () => getRecentConversationsQueryFn(workspaceId),
+    enabled: !!workspaceId,
+    refetchInterval: 15000,
+  });
+  const recentConversations = (recentData?.conversations || []).filter(
+    (c: any) => !c.isSelf
+  );
+
+  // Mark as read mutation
+  const { mutate: markAsRead } = useMutation({
+    mutationFn: markMessagesAsReadMutationFn,
+    onSuccess: () => {
+      queryClient.invalidateQueries({
+        queryKey: ["recent-conversations", workspaceId],
+      });
+    },
   });
 
   // Members for DM
@@ -180,6 +205,9 @@ export default function Messages() {
       queryClient.invalidateQueries({
         queryKey: ["messages", workspaceId, conversationId],
       });
+      queryClient.invalidateQueries({
+        queryKey: ["recent-conversations", workspaceId],
+      });
     },
     onError: (err: any) => {
       toast({
@@ -239,6 +267,9 @@ export default function Messages() {
           }));
         }
       }
+      queryClient.invalidateQueries({
+        queryKey: ["recent-conversations", workspaceId],
+      });
     };
 
     const handleTypingStart = (data: any) => {
@@ -380,17 +411,22 @@ export default function Messages() {
     setAttachments((prev) => prev.filter((_, i) => i !== idx));
   };
 
-  // Filter members for DM list
+  // Filter members for DM list (excludes current user so members never accidentally message themselves)
   const filteredMemberUsers = memberUsers.filter((item: any) => {
+    if (item.user?._id === currentUserId) return false;
     const name = item.user?.name || "";
     const email = item.user?.email || "";
     const q = searchMember.toLowerCase();
     return name.toLowerCase().includes(q) || email.toLowerCase().includes(q);
   });
 
+  const isPersonalNotes = activeType === "dm" && activeDmUserId === currentUserId;
+
   const activeTitle =
     activeType === "channel"
       ? `#${activeChannel}`
+      : isPersonalNotes
+      ? "Personal Notes"
       : activeDmUser
       ? activeDmUser.name
       : "Direct Message";
@@ -398,6 +434,8 @@ export default function Messages() {
   const placeholderText =
     activeType === "channel"
       ? `Message #${activeChannel}...`
+      : isPersonalNotes
+      ? "Write a private note to yourself..."
       : activeDmUser
       ? `Message ${activeDmUser.name}...`
       : "Select a colleague to message...";
@@ -494,56 +532,158 @@ export default function Messages() {
             </div>
           </div>
 
-          {/* DIRECT MESSAGES GROUP */}
+          {/* RECENT DIRECT MESSAGES GROUP */}
+          {recentConversations.length > 0 && (
+            <div>
+              <h3 className="text-[11px] font-bold text-muted-foreground uppercase px-2 mb-1.5 tracking-wider flex items-center justify-between">
+                <span>Recent Chats</span>
+                <Clock className="w-3 h-3 text-muted-foreground" />
+              </h3>
+              <div className="space-y-0.5">
+                {recentConversations.map((c: any) => {
+                  const partner = c.partner;
+                  const partnerId = extractId(partner);
+                  const isSelected = activeType === "dm" && activeDmUserId === partnerId;
+                  const initials = getAvatarFallbackText(partner?.name || "U");
+                  const color = getAvatarColor(partner?.name || "U");
+                  const unread = c.unreadCount || unreadCounts[partnerId] || 0;
+
+                  return (
+                    <button
+                      key={c.conversationId}
+                      onClick={() => {
+                        setActiveType("dm");
+                        setActiveDmUser(partner);
+                        setUnreadCounts((prev) => ({ ...prev, [partnerId]: 0 }));
+                        markAsRead({
+                          workspaceId,
+                          conversationId: c.conversationId,
+                        });
+                      }}
+                      className={`w-full flex items-center justify-between px-2.5 py-1.5 rounded-md text-xs transition-colors ${
+                        isSelected
+                          ? "bg-primary text-primary-foreground font-semibold"
+                          : "hover:bg-accent text-muted-foreground hover:text-foreground"
+                      }`}
+                    >
+                      <div className="flex items-center gap-2 truncate min-w-0">
+                        <Avatar className="h-6 w-6 shrink-0">
+                          <AvatarImage src={partner?.profilePicture || ""} />
+                          <AvatarFallback className={`${color} text-[10px]`}>
+                            {initials}
+                          </AvatarFallback>
+                        </Avatar>
+                        <div className="flex flex-col text-left truncate min-w-0">
+                          <span className="truncate font-medium text-foreground">
+                            {partner?.name || "Colleague"}
+                          </span>
+                          <span className="text-[10px] text-muted-foreground truncate max-w-[130px]">
+                            {c.lastMessage?.content || "Message"}
+                          </span>
+                        </div>
+                      </div>
+
+                      {unread > 0 && !isSelected && (
+                        <span className="ml-2 bg-primary text-primary-foreground text-[10px] font-bold rounded-full h-4 w-4 flex items-center justify-center shrink-0">
+                          {unread}
+                        </span>
+                      )}
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+          )}
+
+          {/* ALL TEAM MEMBERS */}
           <div>
             <h3 className="text-[11px] font-bold text-muted-foreground uppercase px-2 mb-1.5 tracking-wider">
-              Direct Messages
+              Team Members
             </h3>
             <div className="space-y-0.5">
-              {filteredMemberUsers.map((item: any) => {
-                const u = item.user;
-                const uId = u._id;
-                const isSelected = activeType === "dm" && activeDmUserId === uId;
-                const isSelf = uId === currentUserId;
-                const initials = getAvatarFallbackText(u.name || "U");
-                const color = getAvatarColor(u.name || "U");
-                const unread = unreadCounts[uId] || 0;
+              {filteredMemberUsers.length === 0 ? (
+                <p className="text-[11px] text-muted-foreground px-2 py-1 italic">
+                  No other members found
+                </p>
+              ) : (
+                filteredMemberUsers.map((item: any) => {
+                  const u = item.user;
+                  const uId = u._id;
+                  const isSelected = activeType === "dm" && activeDmUserId === uId;
+                  const initials = getAvatarFallbackText(u.name || "U");
+                  const color = getAvatarColor(u.name || "U");
+                  const unread = unreadCounts[uId] || 0;
 
-                return (
-                  <button
-                    key={uId}
-                    onClick={() => {
-                      setActiveType("dm");
-                      setActiveDmUser(u);
-                      setUnreadCounts((prev) => ({ ...prev, [uId]: 0 }));
-                    }}
-                    className={`w-full flex items-center justify-between px-2.5 py-1.5 rounded-md text-xs font-medium transition-colors ${
-                      isSelected
-                        ? "bg-primary text-primary-foreground font-semibold"
-                        : "hover:bg-accent text-muted-foreground hover:text-foreground"
-                    }`}
-                  >
-                    <div className="flex items-center gap-2 truncate">
-                      <Avatar className="h-5 w-5 shrink-0">
-                        <AvatarImage src={u.profilePicture || ""} />
-                        <AvatarFallback className={`${color} text-[9px]`}>
-                          {initials}
-                        </AvatarFallback>
-                      </Avatar>
-                      <span className="truncate">
-                        {u.name} {isSelf && "(You)"}
-                      </span>
-                    </div>
+                  return (
+                    <button
+                      key={uId}
+                      onClick={() => {
+                        setActiveType("dm");
+                        setActiveDmUser(u);
+                        setUnreadCounts((prev) => ({ ...prev, [uId]: 0 }));
+                      }}
+                      className={`w-full flex items-center justify-between px-2.5 py-1.5 rounded-md text-xs font-medium transition-colors ${
+                        isSelected
+                          ? "bg-primary text-primary-foreground font-semibold"
+                          : "hover:bg-accent text-muted-foreground hover:text-foreground"
+                      }`}
+                    >
+                      <div className="flex items-center gap-2 truncate min-w-0">
+                        <Avatar className="h-6 w-6 shrink-0">
+                          <AvatarImage src={u.profilePicture || ""} />
+                          <AvatarFallback className={`${color} text-[10px]`}>
+                            {initials}
+                          </AvatarFallback>
+                        </Avatar>
+                        <div className="flex flex-col text-left truncate min-w-0">
+                          <span className="truncate font-medium">{u.name}</span>
+                          <span className="text-[10px] text-muted-foreground truncate leading-tight">
+                            {u.email}
+                          </span>
+                        </div>
+                      </div>
 
-                    {unread > 0 && !isSelected && (
-                      <span className="ml-2 bg-primary text-primary-foreground text-[10px] font-bold rounded-full h-4 w-4 flex items-center justify-center shrink-0">
-                        {unread}
-                      </span>
-                    )}
-                  </button>
-                );
-              })}
+                      {unread > 0 && !isSelected && (
+                        <span className="ml-2 bg-primary text-primary-foreground text-[10px] font-bold rounded-full h-4 w-4 flex items-center justify-center shrink-0">
+                          {unread}
+                        </span>
+                      )}
+                    </button>
+                  );
+                })
+              )}
             </div>
+          </div>
+
+          {/* PERSONAL NOTES SECTION */}
+          <div className="pt-2 border-t">
+            <h3 className="text-[11px] font-bold text-muted-foreground uppercase px-2 mb-1.5 tracking-wider">
+              Self Notes
+            </h3>
+            <button
+              onClick={() => {
+                setActiveType("dm");
+                setActiveDmUser({
+                  _id: currentUserId,
+                  name: `${user?.name || "You"} (Personal Notes)`,
+                  email: user?.email || "",
+                  profilePicture: user?.profilePicture || null,
+                });
+              }}
+              className={`w-full flex items-center gap-2 px-2.5 py-1.5 rounded-md text-xs font-medium transition-colors ${
+                isPersonalNotes
+                  ? "bg-primary text-primary-foreground font-semibold"
+                  : "hover:bg-accent text-muted-foreground hover:text-foreground"
+              }`}
+            >
+              <div className="h-6 w-6 rounded bg-primary/10 text-primary flex items-center justify-center shrink-0">
+                <FileText className="w-3.5 h-3.5" />
+              </div>
+              <div className="flex flex-col text-left min-w-0">
+                <span className="truncate font-semibold">Personal Notes</span>
+                <span className="text-[10px] text-muted-foreground truncate">Private to you</span>
+              </div>
+            </button>
           </div>
         </div>
       </div>
@@ -683,6 +823,28 @@ export default function Messages() {
                           minute: "2-digit",
                         })}
                       </span>
+                      {!isMe && (activeType === "channel" || isPersonalNotes) && (
+                        <button
+                          type="button"
+                          onClick={() => {
+                            if (msg.senderId) {
+                              const partner = {
+                                _id: extractId(msg.senderId),
+                                name: msg.senderId.name || "Colleague",
+                                email: msg.senderId.email || "",
+                                profilePicture: msg.senderId.profilePicture || null,
+                              };
+                              setActiveType("dm");
+                              setActiveDmUser(partner);
+                            }
+                          }}
+                          className="text-[10px] text-primary hover:underline flex items-center gap-1 font-medium ml-1.5 cursor-pointer"
+                          title="Direct message this colleague"
+                        >
+                          <MessageSquare className="w-3 h-3" />
+                          <span>Reply in DM</span>
+                        </button>
+                      )}
                     </div>
 
                     <div

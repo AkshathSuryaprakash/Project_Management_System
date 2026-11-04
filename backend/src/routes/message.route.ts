@@ -2,6 +2,7 @@ import { Router } from "express";
 import {
   getChannelsController,
   getConversationMessagesController,
+  getRecentConversationsController,
   markMessagesAsReadController,
   sendMessageController,
 } from "../controllers/message.controller";
@@ -9,6 +10,7 @@ import {
 const messageRoutes = Router({ mergeParams: true });
 
 messageRoutes.get("/channels", getChannelsController);
+messageRoutes.get("/recent", getRecentConversationsController);
 messageRoutes.get("/conversations/:conversationId", getConversationMessagesController);
 messageRoutes.post("/send", sendMessageController);
 messageRoutes.put("/read", markMessagesAsReadController);

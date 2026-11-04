@@ -85,13 +85,8 @@ export const sendMessageService = async (
   let recipientId = data.recipientId;
   let channelName = data.channel;
 
-  if (channelName) {
-    channelName = channelName.toLowerCase();
-    convId = `channel:${channelName}`;
-    recipientId = undefined;
-  } else if (recipientId) {
-    convId = getConversationIdHelper("dm", recipientId, senderId);
-  } else if (convId) {
+  // 1. If conversationId is explicitly provided, prioritize and lock destination
+  if (convId) {
     if (convId.toLowerCase().startsWith("channel:")) {
       channelName = convId.replace(/channel:/i, "").toLowerCase();
       convId = `channel:${channelName}`;
@@ -99,12 +94,29 @@ export const sendMessageService = async (
     } else if (convId.startsWith("dm:")) {
       const parts = convId.replace("dm:", "").split("_");
       if (parts.length === 2) {
-        if (parts[0] === senderId) recipientId = parts[1];
-        else if (parts[1] === senderId) recipientId = parts[0];
-        else throw new ForbiddenException("You are not a participant in this conversation.");
-        convId = getConversationIdHelper("dm", recipientId, senderId);
+        if (parts[0] !== parts[1]) {
+          // Normal 1-on-1 DM between two users: target the OTHER participant
+          if (parts[0] === senderId) {
+            recipientId = parts[1];
+          } else if (parts[1] === senderId) {
+            recipientId = parts[0];
+          } else {
+            throw new ForbiddenException("You are not a participant in this conversation.");
+          }
+          convId = getConversationIdHelper("dm", recipientId, senderId);
+        } else {
+          // Explicit self-conversation (Personal Notes)
+          recipientId = senderId;
+          convId = `dm:${senderId}_${senderId}`;
+        }
       }
     }
+  } else if (channelName) {
+    channelName = channelName.toLowerCase();
+    convId = `channel:${channelName}`;
+    recipientId = undefined;
+  } else if (recipientId) {
+    convId = getConversationIdHelper("dm", recipientId, senderId);
   } else {
     throw new BadRequestException("Either conversationId, channel, or recipientId is required.");
   }
@@ -174,4 +186,59 @@ export const markMessagesAsReadService = async (
 
   return { success: true };
 };
+
+export const getRecentConversationsService = async (
+  workspaceId: string,
+  userId: string
+) => {
+  const messages = await MessageModel.find({
+    workspaceId,
+    conversationId: { $regex: /^dm:/ },
+    $or: [{ senderId: userId }, { recipientId: userId }],
+  })
+    .sort({ createdAt: -1 })
+    .limit(300)
+    .populate("senderId", "name email profilePicture")
+    .populate("recipientId", "name email profilePicture");
+
+  const conversationsMap = new Map<string, any>();
+
+  for (const msg of messages) {
+    const convId = msg.conversationId;
+    const sId = (msg.senderId as any)?._id?.toString() || msg.senderId?.toString();
+    const rId = (msg.recipientId as any)?._id?.toString() || msg.recipientId?.toString();
+
+    if (!conversationsMap.has(convId)) {
+      const isSelf = sId === userId.toString() && (!rId || rId === userId.toString());
+      const partner = isSelf
+        ? msg.senderId
+        : sId === userId.toString()
+        ? msg.recipientId
+        : msg.senderId;
+
+      const unread = !msg.readBy.map((id: any) => id?.toString()).includes(userId.toString()) ? 1 : 0;
+
+      conversationsMap.set(convId, {
+        conversationId: convId,
+        partner,
+        isSelf,
+        lastMessage: {
+          _id: msg._id,
+          content: msg.content,
+          senderId: msg.senderId,
+          createdAt: msg.createdAt,
+        },
+        unreadCount: unread,
+      });
+    } else {
+      const existing = conversationsMap.get(convId);
+      if (!msg.readBy.map((id: any) => id?.toString()).includes(userId.toString())) {
+        existing.unreadCount += 1;
+      }
+    }
+  }
+
+  return { conversations: Array.from(conversationsMap.values()) };
+};
+
 

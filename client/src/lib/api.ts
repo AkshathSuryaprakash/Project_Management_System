@@ -361,6 +361,11 @@ export const getChannelsQueryFn = async (workspaceId: string) => {
   return response.data;
 };
 
+export const getRecentConversationsQueryFn = async (workspaceId: string) => {
+  const response = await API.get(`/workspace/${workspaceId}/messages/recent`);
+  return response.data;
+};
+
 export const getConversationMessagesQueryFn = async (
   workspaceId: string,
   conversationId: string

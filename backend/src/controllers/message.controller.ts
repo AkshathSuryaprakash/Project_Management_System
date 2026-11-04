@@ -5,6 +5,7 @@ import { getMemberRoleInWorkspace } from "../services/member.service";
 import {
   getChannelsService,
   getConversationMessagesService,
+  getRecentConversationsService,
   markMessagesAsReadService,
   sendMessageService,
 } from "../services/message.service";
@@ -114,6 +115,25 @@ export const markMessagesAsReadController = asyncHandler(
 
     return res.status(HTTPSTATUS.OK).json({
       message: "Messages marked as read",
+    });
+  }
+);
+
+export const getRecentConversationsController = asyncHandler(
+  async (req: Request, res: Response) => {
+    const userId = req.user?._id;
+    const { workspaceId } = req.params;
+
+    await getMemberRoleInWorkspace(userId, workspaceId);
+
+    const { conversations } = await getRecentConversationsService(
+      workspaceId,
+      userId.toString()
+    );
+
+    return res.status(HTTPSTATUS.OK).json({
+      message: "Recent conversations fetched successfully",
+      conversations,
     });
   }
 );
