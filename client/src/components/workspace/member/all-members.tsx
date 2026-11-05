@@ -105,6 +105,8 @@ const AllMembers = () => {
         const initials = getAvatarFallbackText(name);
         const avatarColor = getAvatarColor(name);
         const roleName = member.role?.name || "MEMBER";
+        const isTargetOwner = roleName.toUpperCase() === "OWNER";
+        const canEditThisRole = canChangeMemberRole && !isSelf && !isTargetOwner;
 
         return (
           <div
@@ -152,26 +154,20 @@ const AllMembers = () => {
                 </Button>
               )}
 
-              {/* Role selector matching Figure 9.13 */}
-              <Popover>
-                <PopoverTrigger asChild>
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    className="min-w-24 capitalize text-xs h-8"
-                    disabled={
-                      isLoading ||
-                      !canChangeMemberRole ||
-                      isSelf
-                    }
-                  >
-                    {roleName.toLowerCase()}{" "}
-                    {canChangeMemberRole && !isSelf && (
-                      <ChevronDown className="ml-1 h-3 w-3 text-muted-foreground" />
-                    )}
-                  </Button>
-                </PopoverTrigger>
-                {canChangeMemberRole && !isSelf && (
+              {/* Role selector matching Figure 9.13: Only Owner can change member roles, Owner role cannot be changed */}
+              {canEditThisRole ? (
+                <Popover>
+                  <PopoverTrigger asChild>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      className="min-w-24 capitalize text-xs h-8 justify-between"
+                      disabled={isLoading}
+                    >
+                      <span>{roleName.toLowerCase()}</span>
+                      <ChevronDown className="ml-1 h-3 w-3 text-muted-foreground shrink-0" />
+                    </Button>
+                  </PopoverTrigger>
                   <PopoverContent className="p-0" align="end">
                     <Command>
                       <CommandInput
@@ -202,7 +198,7 @@ const AllMembers = () => {
                                       </p>
                                       <p className="text-[11px] text-muted-foreground">
                                         {r.name === "ADMIN" &&
-                                          "Full project and task delegation rights"}
+                                          "Project and task allocation rights"}
                                         {r.name === "MEMBER" &&
                                           "View tasks and manage own assigned tasks"}
                                       </p>
@@ -215,8 +211,22 @@ const AllMembers = () => {
                       </CommandList>
                     </Command>
                   </PopoverContent>
-                )}
-              </Popover>
+                </Popover>
+              ) : (
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="min-w-24 capitalize text-xs h-8 cursor-default opacity-85"
+                  disabled={true}
+                  title={
+                    isTargetOwner
+                      ? "Workspace owner position is fixed and cannot be changed"
+                      : "Only the workspace owner has permission to change member roles"
+                  }
+                >
+                  <span>{roleName.toLowerCase()}</span>
+                </Button>
+              )}
 
               {/* Remove member button matching Figure 9.13 */}
               {canRemoveMember && !isSelf && (

@@ -20,7 +20,8 @@ import {
   updateWorkspaceByIdService,
 } from "../services/workspace.service";
 import { getMemberRoleInWorkspace } from "../services/member.service";
-import { Permissions } from "../enums/role.enum";
+import { Permissions, Roles } from "../enums/role.enum";
+import { ForbiddenException } from "../utils/appError";
 import { roleGuard } from "../utils/roleGuard";
 import { updateWorkspaceSchema } from "../validation/workspace.validation";
 
@@ -112,6 +113,12 @@ export const changeWorkspaceMemberRoleController = asyncHandler(
     const userId = req.user?._id;
 
     const { role } = await getMemberRoleInWorkspace(userId, workspaceId);
+
+    // Strictly Owner-only: Admins cannot change roles/positions of owner or others
+    if (role !== Roles.OWNER) {
+      throw new ForbiddenException("Only the workspace owner has permission to change member roles or positions.");
+    }
+
     roleGuard(role, [Permissions.CHANGE_MEMBER_ROLE]);
 
     const { member } = await changeMemberRoleService(

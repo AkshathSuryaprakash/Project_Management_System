@@ -165,13 +165,27 @@ export const changeMemberRoleService = async (
   const member = await MemberModel.findOne({
     userId: memberId,
     workspaceId: workspaceId,
-  });
+  }).populate("role");
 
   if (!member) {
-    throw new Error("Member not found in the workspace");
+    throw new NotFoundException("Member not found in the workspace");
   }
 
-  member.role = role;
+  // 1. Strictly forbid modifying the Owner's position/role
+  const isTargetOwner =
+    workspace.owner.toString() === member.userId.toString() ||
+    (member.role as any)?.name === Roles.OWNER;
+
+  if (isTargetOwner) {
+    throw new BadRequestException("The workspace owner's role/position cannot be modified.");
+  }
+
+  // 2. Prevent assigning the OWNER role through member role updates
+  if (role.name === Roles.OWNER) {
+    throw new BadRequestException("Cannot assign Owner position. Workspace ownership must be transferred.");
+  }
+
+  member.role = role._id as any;
   await member.save();
 
   return {

@@ -24,8 +24,10 @@ const roleSchema = new Schema<RoleDocument>(
       type: [String],
       enum: Object.values(Permissions),
       required: true,
-      default: function (this: RoleDocument) {
-        return RolePermissions[this.name];
+      default: function (this: any) {
+        return this?.name && RolePermissions[this.name as RoleType]
+          ? RolePermissions[this.name as RoleType]
+          : [];
       },
     },
   },

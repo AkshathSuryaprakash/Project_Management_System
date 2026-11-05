@@ -33,21 +33,21 @@ const dummyMembers = [
 
 export const seedRolesIfEmpty = async () => {
   try {
-    const count = await RoleModel.countDocuments();
-    if (count === 0) {
-      console.log("No roles found in database. Seeding roles...");
-      for (const roleName in RolePermissions) {
-        const role = roleName as keyof typeof RolePermissions;
-        const permissions = RolePermissions[role];
-        const newRole = new RoleModel({
+    for (const roleName in RolePermissions) {
+      const role = roleName as keyof typeof RolePermissions;
+      const permissions = RolePermissions[role];
+      const existing = await RoleModel.findOne({ name: role });
+      if (!existing) {
+        await RoleModel.create({
           name: role,
           permissions: permissions,
         });
-        await newRole.save();
-        console.log(`Role ${role} added with permissions.`);
+      } else {
+        existing.permissions = permissions;
+        await existing.save();
       }
-      console.log("Roles seeded successfully.");
     }
+    console.log("Roles synchronized with latest permissions.");
   } catch (error) {
     console.error("Error checking or seeding roles:", error);
   }
